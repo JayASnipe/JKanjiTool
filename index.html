@@ -18,10 +18,6 @@ window.onerror = function(msg, src, line, col, err) {
   el.textContent = 'Error: ' + msg + '\nLine: ' + line + '\n' + (err ? err.stack : '');
 };
 const { useState, useRef, useEffect, useCallback } = React;
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.default = App;
-const react_1 = require("react");
 // ─── OFFLINE / SERVICE WORKER REGISTRATION ───────────────────────────────────
 // Registers an inline SW via blob URL so the app caches itself for offline use.
 // On first load, the SW pre-caches the page. On subsequent loads it serves from cache.
@@ -1431,12 +1427,12 @@ function shuffle(arr) {
 }
 // ─── TIMER HOOK ──────────────────────────────────────────────────────────────
 function useCountdown(seconds, active, onExpire) {
-    const [timeLeft, setTimeLeft] = (0, react_1.useState)(seconds);
-    const ref = (0, react_1.useRef)(null);
-    (0, react_1.useEffect)(() => {
+    const [timeLeft, setTimeLeft] = (0, useState)(seconds);
+    const ref = (0, useRef)(null);
+    (0, useEffect)(() => {
         setTimeLeft(seconds);
     }, [seconds]);
-    (0, react_1.useEffect)(() => {
+    (0, useEffect)(() => {
         if (!active) {
             clearInterval(ref.current);
             return;
@@ -1453,8 +1449,8 @@ function useCountdown(seconds, active, onExpire) {
         }, 1000);
         return () => clearInterval(ref.current);
     }, [active, onExpire]);
-    const reset = (0, react_1.useCallback)((s) => setTimeLeft(s !== null && s !== void 0 ? s : seconds), [seconds]);
-    const stop = (0, react_1.useCallback)(() => clearInterval(ref.current), []);
+    const reset = (0, useCallback)((s) => setTimeLeft(s !== null && s !== void 0 ? s : seconds), [seconds]);
+    const stop = (0, useCallback)(() => clearInterval(ref.current), []);
     return { timeLeft, reset, stop };
 }
 // ─── LIBRARY GROUPS ──────────────────────────────────────────────────────────
@@ -1476,54 +1472,54 @@ const GROUPS = [
 function App() {
     var _a, _b;
     // ── persistent state (loaded from localStorage) ──
-    const [extraLibraries, setExtraLibraries] = (0, react_1.useState)(() => LS.get("kanji_extra_libs", []));
-    const [reviewKanji, setReviewKanji] = (0, react_1.useState)(() => new Set(LS.get("kanji_review", [])));
-    const [studied, setStudied] = (0, react_1.useState)(() => LS.get("kanji_studied", {}));
-    const [scores, setScores] = (0, react_1.useState)(() => LS.get("kanji_scores", {}));
+    const [extraLibraries, setExtraLibraries] = (0, useState)(() => LS.get("kanji_extra_libs", []));
+    const [reviewKanji, setReviewKanji] = (0, useState)(() => new Set(LS.get("kanji_review", [])));
+    const [studied, setStudied] = (0, useState)(() => LS.get("kanji_studied", {}));
+    const [scores, setScores] = (0, useState)(() => LS.get("kanji_scores", {}));
     // ── session state ──
-    const [libId, setLibId] = (0, react_1.useState)(BUILTIN_LIBRARIES[0].id);
-    const [mode, setMode] = (0, react_1.useState)("flash");
+    const [libId, setLibId] = (0, useState)(BUILTIN_LIBRARIES[0].id);
+    const [mode, setMode] = (0, useState)("flash");
     // ── READ mode state ──
-    const [readScope, setReadScope] = (0, react_1.useState)("library"); // "card" | "library"
-    const [readType, setReadType] = (0, react_1.useState)("sentences"); // "sentences" | "story"
-    const [readLevel, setReadLevel] = (0, react_1.useState)("N5"); // "N5" | "N4" | "N3"
-    const [readCount, setReadCount] = (0, react_1.useState)(5); // 5 | 10 | 15
-    const [readLength, setReadLength] = (0, react_1.useState)("medium"); // "short" | "medium" | "long"
-    const [readContent, setReadContent] = (0, react_1.useState)(null); // parsed content array
-    const [readLoading, setReadLoading] = (0, react_1.useState)(false);
-    const [readError, setReadError] = (0, react_1.useState)(null);
-    const [pinnedWords, setPinnedWords] = (0, react_1.useState)(new Set()); // mobile tap-to-show furigana
-    const [hoveredWord, setHoveredWord] = (0, react_1.useState)(null); // desktop hover furigana
-    const [revealedTranslations, setRevealedTranslations] = (0, react_1.useState)(new Set());
-    const [speakingIdx, setSpeakingIdx] = (0, react_1.useState)(null); // index of currently speaking item, or "all"
-    const [showLib, setShowLib] = (0, react_1.useState)(false);
-    const [activeGroup, setActiveGroup] = (0, react_1.useState)(null);
-    const [idx, setIdx] = (0, react_1.useState)(0);
-    const [layer, setLayer] = (0, react_1.useState)(0);
-    const [wideFlash, setWideFlash] = (0, react_1.useState)(false);
-    const [streak, setStreak] = (0, react_1.useState)(0);
-    const [revealed, setRevealed] = (0, react_1.useState)(false);
-    const [toast, setToast] = (0, react_1.useState)(null);
+    const [readScope, setReadScope] = (0, useState)("library"); // "card" | "library"
+    const [readType, setReadType] = (0, useState)("sentences"); // "sentences" | "story"
+    const [readLevel, setReadLevel] = (0, useState)("N5"); // "N5" | "N4" | "N3"
+    const [readCount, setReadCount] = (0, useState)(5); // 5 | 10 | 15
+    const [readLength, setReadLength] = (0, useState)("medium"); // "short" | "medium" | "long"
+    const [readContent, setReadContent] = (0, useState)(null); // parsed content array
+    const [readLoading, setReadLoading] = (0, useState)(false);
+    const [readError, setReadError] = (0, useState)(null);
+    const [pinnedWords, setPinnedWords] = (0, useState)(new Set()); // mobile tap-to-show furigana
+    const [hoveredWord, setHoveredWord] = (0, useState)(null); // desktop hover furigana
+    const [revealedTranslations, setRevealedTranslations] = (0, useState)(new Set());
+    const [speakingIdx, setSpeakingIdx] = (0, useState)(null); // index of currently speaking item, or "all"
+    const [showLib, setShowLib] = (0, useState)(false);
+    const [activeGroup, setActiveGroup] = (0, useState)(null);
+    const [idx, setIdx] = (0, useState)(0);
+    const [layer, setLayer] = (0, useState)(0);
+    const [wideFlash, setWideFlash] = (0, useState)(false);
+    const [streak, setStreak] = (0, useState)(0);
+    const [revealed, setRevealed] = (0, useState)(false);
+    const [toast, setToast] = (0, useState)(null);
     // quiz
-    const [quizSetup, setQuizSetup] = (0, react_1.useState)(true);
-    const [quizCount, setQuizCount] = (0, react_1.useState)(10);
-    const [quizTimerEnabled, setQuizTimerEnabled] = (0, react_1.useState)(false);
-    const [quizType, setQuizType] = (0, react_1.useState)("kanji"); // "kanji" | "compounds" | "compounds_reverse"
-    const [answerStyle, setAnswerStyle] = (0, react_1.useState)("traditional"); // "traditional" | "japanese" | "english"
-    const [quizDifficulty, setQuizDifficulty] = (0, react_1.useState)("easy"); // "easy" | "hard" — compounds_reverse only
+    const [quizSetup, setQuizSetup] = (0, useState)(true);
+    const [quizCount, setQuizCount] = (0, useState)(10);
+    const [quizTimerEnabled, setQuizTimerEnabled] = (0, useState)(false);
+    const [quizType, setQuizType] = (0, useState)("kanji"); // "kanji" | "compounds" | "compounds_reverse"
+    const [answerStyle, setAnswerStyle] = (0, useState)("traditional"); // "traditional" | "japanese" | "english"
+    const [quizDifficulty, setQuizDifficulty] = (0, useState)("easy"); // "easy" | "hard" — compounds_reverse only
     const QUIZ_TIMER_SECONDS = 10;
-    const [quizCards, setQuizCards] = (0, react_1.useState)([]);
-    const [quizIdx, setQuizIdx] = (0, react_1.useState)(0);
-    const [quizOpts, setQuizOpts] = (0, react_1.useState)([]);
-    const [quizAnswered, setQuizAnswered] = (0, react_1.useState)(null);
-    const [quizScore, setQuizScore] = (0, react_1.useState)(0);
-    const [quizBonusTotal, setQuizBonusTotal] = (0, react_1.useState)(0);
-    const [quizDone, setQuizDone] = (0, react_1.useState)(false);
-    const [timerActive, setTimerActive] = (0, react_1.useState)(false);
-    const [compoundQuestion, setCompoundQuestion] = (0, react_1.useState)(null); // { compound, cardIdx }
-    const canvasRef = (0, react_1.useRef)(null);
-    const drawing = (0, react_1.useRef)(false);
-    const lastPos = (0, react_1.useRef)({ x: 0, y: 0 });
+    const [quizCards, setQuizCards] = (0, useState)([]);
+    const [quizIdx, setQuizIdx] = (0, useState)(0);
+    const [quizOpts, setQuizOpts] = (0, useState)([]);
+    const [quizAnswered, setQuizAnswered] = (0, useState)(null);
+    const [quizScore, setQuizScore] = (0, useState)(0);
+    const [quizBonusTotal, setQuizBonusTotal] = (0, useState)(0);
+    const [quizDone, setQuizDone] = (0, useState)(false);
+    const [timerActive, setTimerActive] = (0, useState)(false);
+    const [compoundQuestion, setCompoundQuestion] = (0, useState)(null); // { compound, cardIdx }
+    const canvasRef = (0, useRef)(null);
+    const drawing = (0, useRef)(false);
+    const lastPos = (0, useRef)({ x: 0, y: 0 });
     // ── derive all libraries including review ──
     const reviewCards = (() => {
         if (reviewKanji.size === 0)
@@ -1556,22 +1552,22 @@ function App() {
     const libStudied = new Set(studied[libId] || []);
     const libScore = scores[libId] || 0;
     // ── persist to localStorage whenever state changes ──
-    (0, react_1.useEffect)(() => { LS.set("kanji_extra_libs", extraLibraries); }, [extraLibraries]);
-    (0, react_1.useEffect)(() => { LS.set("kanji_review", [...reviewKanji]); }, [reviewKanji]);
-    (0, react_1.useEffect)(() => { LS.set("kanji_studied", studied); }, [studied]);
-    (0, react_1.useEffect)(() => { LS.set("kanji_scores", scores); }, [scores]);
-    (0, react_1.useEffect)(() => { setIdx(0); setLayer(0); setRevealed(false); }, [libId]);
-    (0, react_1.useEffect)(() => { setLayer(0); setRevealed(false); }, [idx]);
-    (0, react_1.useEffect)(() => { if (mode === "write")
+    (0, useEffect)(() => { LS.set("kanji_extra_libs", extraLibraries); }, [extraLibraries]);
+    (0, useEffect)(() => { LS.set("kanji_review", [...reviewKanji]); }, [reviewKanji]);
+    (0, useEffect)(() => { LS.set("kanji_studied", studied); }, [studied]);
+    (0, useEffect)(() => { LS.set("kanji_scores", scores); }, [scores]);
+    (0, useEffect)(() => { setIdx(0); setLayer(0); setRevealed(false); }, [libId]);
+    (0, useEffect)(() => { setLayer(0); setRevealed(false); }, [idx]);
+    (0, useEffect)(() => { if (mode === "write")
         setTimeout(initCanvas, 60); }, [mode, idx]);
-    (0, react_1.useEffect)(() => { if (mode === "quiz") {
+    (0, useEffect)(() => { if (mode === "quiz") {
         setQuizSetup(true);
         setQuizDone(false);
         setQuizScore(0);
         setQuizBonusTotal(0);
     } }, [mode, libId]);
     // ── timer ──
-    const handleTimerExpire = (0, react_1.useCallback)(() => {
+    const handleTimerExpire = (0, useCallback)(() => {
         if (quizAnswered)
             return;
         setQuizAnswered("__expired__");
