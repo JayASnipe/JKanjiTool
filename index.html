@@ -1766,24 +1766,27 @@ function App() {
     }
     // ── CYOA — build prompt and open in Claude.ai ──
     function buildCYOAPrompt() {
+        const cyoaThemeMap = {
+            fantasy: "a fantasy adventure with magic, warriors, and mysterious lands",
+            mystery: "a detective mystery in modern Japan",
+            slice: "a warm slice-of-life story set in everyday Japan",
+            historical: "a story set in feudal Japan (samurai era)",
+        };
         const vocabCards = readScope === "card" ? [card] : cards;
         const vocabList = vocabCards
             .flatMap(c => (c.compounds || []).map(cp => `${cp.jp}(${cp.reading}, ${cp.meaning})`))
             .slice(0, 40).join("、");
         const theme = cyoaThemeMap[cyoaTheme] || cyoaThemeMap.fantasy;
-        return `You are a Japanese language teacher running a choose-your-own-adventure story for a student studying Japanese at JLPT ${readLevel} level.
+        return `You are a Japanese language teacher running a choose-your-own-adventure story for a student studying Japanese at JLPT ${readLevel} level. Write it at a PG13-rated level in the style of a light novel with an emphasis on character growth, building a party and a grand adventure.
 
 Theme: ${theme}
 Vocabulary to weave in naturally: ${vocabList}
 
 Rules:
 - Write each section in Japanese (3-5 sentences)
-- Add furigana to all kanji using this format: [漢字|かんじ]
 - After each section add an English translation in italics
 - End each section with exactly 4 choices: A, B, C, and D: Write your own
 - Wait for the reader to choose before continuing
-- Continue for 5-7 beats then bring the story to a satisfying conclusion
-- Tip: The reader can use their browser or device read-aloud to hear the Japanese text
 
 Begin the story now with the opening scene.`;
     }
@@ -2488,8 +2491,19 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
                             background: cyoaTheme === key ? "#1a1008" : "#faf6ee",
                             color: cyoaTheme === key ? "#f5efe3" : "#1a1008",
                             cursor: "pointer", fontSize: "0.72rem", fontWeight: 600 } }, label))))),
-                React.createElement("button", { style: Object.assign(Object.assign({}, S.ghost), { width: "100%", padding: "12px" }), onClick: openCYOA }, "\uD83D\uDCD6 Open Adventure in Claude \u2197"),
-                React.createElement("button", { style: Object.assign(Object.assign({}, S.ghost), { width: "100%", padding: "12px", marginTop: 8 }), onClick: openCYOAGrok }, "\uD83D\uDCD6 Open Adventure in Grok \u2197"),
+                (() => {
+                    const prompt = buildCYOAPrompt();
+                    const encoded = encodeURIComponent(prompt);
+                    return (React.createElement(React.Fragment, null,
+                        React.createElement("a", { href: `https://claude.ai/new?q=${encoded}`, target: "_blank", rel: "noopener noreferrer", style: { display: "block", width: "100%", padding: "12px", borderRadius: 3, border: "1px solid #1a1008",
+                                background: "transparent", color: "#1a1008", fontSize: "0.7rem", fontFamily: "monospace",
+                                letterSpacing: "0.12em", cursor: "pointer", textAlign: "center", textDecoration: "none",
+                                boxSizing: "border-box" } }, "\uD83D\uDCD6 Open Adventure in Claude \u2197"),
+                        React.createElement("a", { href: `https://x.com/i/grok?text=${encoded}`, target: "_blank", rel: "noopener noreferrer", style: { display: "block", width: "100%", padding: "12px", marginTop: 8, borderRadius: 3,
+                                border: "1px solid #1a1008", background: "transparent", color: "#1a1008",
+                                fontSize: "0.7rem", fontFamily: "monospace", letterSpacing: "0.12em",
+                                cursor: "pointer", textAlign: "center", textDecoration: "none", boxSizing: "border-box" } }, "\uD83D\uDCD6 Open Adventure in Grok \u2197")));
+                })(),
                 React.createElement("div", { style: { fontSize: "0.6rem", color: "#bbb", textAlign: "center", marginTop: 5 } }, "Opens with your vocabulary \u2014 branching story, you choose what happens next"))),
             readLoading && (React.createElement("div", { style: { textAlign: "center", padding: "40px 0", color: "#aaa", fontFamily: "serif", fontSize: "1.1rem" } },
                 React.createElement("div", { style: { fontSize: "2rem", marginBottom: 12 } }, "\u2726"),
