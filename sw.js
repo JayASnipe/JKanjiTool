@@ -1,4 +1,4 @@
-const CACHE_NAME = 'j-kanji-v1';
+const CACHE_NAME = 'j-kanji-v2';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -6,7 +6,6 @@ const CORE_ASSETS = [
   'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
 ];
 
-// Install — cache all core assets
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -15,7 +14,6 @@ self.addEventListener('install', event => {
   );
 });
 
-// Activate — clean up old caches
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
@@ -27,11 +25,10 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Fetch — cache-first for core app, network-first for API calls
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // Always go to network for API calls — never cache these
+  // Always network for API calls
   if (url.hostname.includes('workers.dev') ||
       url.hostname.includes('anthropic.com') ||
       url.hostname.includes('claude.ai') ||
@@ -46,20 +43,32 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Cache-first for everything else (app shell, CDN assets)
+  // Network-first for index.html so updates arrive promptly
+  if (url.pathname === '/' || url.pathname.endsWith('index.html')) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
+  // Cache-first for everything else (React CDN, icons, manifest)
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
-      // Not in cache — fetch, cache, and return
       return fetch(event.request).then(response => {
         if (!response || response.status !== 200 || response.type === 'opaque') {
           return response;
         }
-        const toCache = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, toCache));
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         return response;
       }).catch(() => {
-        // Offline and not cached — return offline page for navigation requests
         if (event.request.mode === 'navigate') {
           return caches.match('./index.html');
         }
