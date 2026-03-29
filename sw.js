@@ -1,7 +1,14 @@
-const CACHE_NAME = 'j-kanji-v3';
+const CACHE_NAME = 'j-kanji-v4';
 const CORE_ASSETS = [
   './',
   './index.html',
+  './app-compiled.js',
+  './data-grammar.js',
+  './data-thematic.js',
+  './data-spicy.js',
+  './data-grades.js',
+  './data-grades-2-5.js',
+  './data-groups.js',
   'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
 ];
@@ -19,7 +26,7 @@ self.addEventListener('activate', event => {
     caches.keys().then(keys =>
       Promise.all(keys
         .filter(key => key !== CACHE_NAME)
-        .map(key => caches.delete(key))
+        .map(key => { console.log('Deleting old cache:', key); return caches.delete(key); })
       )
     ).then(() => self.clients.claim())
   );
@@ -28,7 +35,6 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // Always network for API calls
   if (url.hostname.includes('workers.dev') ||
       url.hostname.includes('anthropic.com') ||
       url.hostname.includes('claude.ai') ||
@@ -43,8 +49,8 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Network-first for index.html so updates arrive promptly
-  if (url.pathname === '/' || url.pathname.endsWith('index.html')) {
+  // Network-first for HTML and JS files so updates arrive promptly
+  if (url.pathname.endsWith('.html') || url.pathname.endsWith('.js') || url.pathname === '/') {
     event.respondWith(
       fetch(event.request)
         .then(response => {
@@ -52,27 +58,21 @@ self.addEventListener('fetch', event => {
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
           return response;
         })
-        .catch(() => caches.match('./index.html'))
+        .catch(() => caches.match(event.request))
     );
     return;
   }
 
-  // Cache-first for everything else (React CDN, icons, manifest)
+  // Cache-first for everything else (icons, manifest)
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
       return fetch(event.request).then(response => {
-        if (!response || response.status !== 200 || response.type === 'opaque') {
-          return response;
-        }
+        if (!response || response.status !== 200) return response;
         const clone = response.clone();
         caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         return response;
-      }).catch(() => {
-        if (event.request.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
-      });
+      }).catch(() => caches.match('./index.html'));
     })
   );
 });
