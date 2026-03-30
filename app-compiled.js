@@ -532,7 +532,15 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
             React.createElement("div", { style: { textAlign: "center", flex: 1 } },
                 React.createElement("div", { style: { fontFamily: "serif", fontSize: "2rem", fontWeight: 700, letterSpacing: "0.05em" } }, "J Kanji Tool"),
                 React.createElement("div", { style: { fontSize: "0.6rem", letterSpacing: "0.2em", color: "#aaa", textTransform: "uppercase" } }, "Japanese Kanji Study \u00B7 \u6F22\u5B57\u5B66\u7FD2")),
-            React.createElement("button", { onClick: () => window.location.reload(true), title: "Check for updates", style: { width: 36, height: 36, background: "transparent", border: "none", cursor: "pointer",
+                React.createElement("button", { onClick: () => {
+                    if ('serviceWorker' in navigator) {
+                        caches.keys().then(function(keys) {
+                            Promise.all(keys.map(function(k) { return caches.delete(k); }))
+                            .then(function() { window.location.reload(); });
+                    });
+                    } else { window.location.reload();}
+                    }, title: "Check for updates", style: { width: 36, height: 36, background: "transparent", border: "none", cursor: "pointer",
+                    fontSize: "1.1rem", color: "#bbb", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, "\u21BB")),ct.createElement("button", { onClick: () => window.location.reload(true), title: "Check for updates", style: { width: 36, height: 36, background: "transparent", border: "none", cursor: "pointer",
                     fontSize: "1.1rem", color: "#bbb", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, "\u21BB")),
         React.createElement("div", { style: { width: "100%", marginBottom: 10, position: "relative" } },
             React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "stretch", width: "100%" } },
