@@ -10,42 +10,153 @@
   <link rel="manifest" href="./manifest.json">
   <link rel="apple-touch-icon" href="./icon-192.png">
   <title>J Kanji</title>
-  <style>* { box-sizing: border-box; margin: 0; padding: 0; } body { background: #f5efe3; }</style>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f5efe3; }
+    #loader {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: #f5efe3; font-family: serif; gap: 16px; z-index: 9999;
+    }
+    #loader .moai { font-size: 3rem; }
+    #loader .msg  { font-size: 0.9rem; color: #7a6a50; letter-spacing: 0.05em; }
+    #loader .bar-wrap { width: 160px; height: 4px; background: #e8dcc8; border-radius: 2px; overflow: hidden; }
+    #loader .bar { height: 100%; width: 0%; background: #1a1008; border-radius: 2px; transition: width 0.3s ease; }
+  </style>
 </head>
 <body>
   <div id="root"></div>
+  <div id="loader">
+    <div class="moai">🗿</div>
+    <div class="bar-wrap"><div class="bar" id="prog"></div></div>
+    <div class="msg" id="load-msg">Loading…</div>
+  </div>
   <div id="error" style="display:none;padding:20px;color:red;font-family:monospace;white-space:pre-wrap"></div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+
   <script>
-if ('serviceWorker' in navigator && location.hostname !== 'www.claudeusercontent.com') {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
-      .then(reg => console.log('SW registered:', reg.scope))
-      .catch(err => console.log('SW failed:', err));
-  });
-}
-window.onerror = function(msg,src,line,col,err) {
-  var el = document.getElementById('error');
-  el.style.display = 'block';
-  el.textContent = 'Error: ' + msg + '\nLine: ' + line + '\n' + (err ? err.stack : '');
-};
-  </script>
-  <script src="./data-grammar.js?v=4"></script>
-  <script src="./data-thematic.js?v=4"></script>
-  <script src="./data-spicy.js?v=4"></script>
-  <script src="./data-grades.js?v=4"></script>
-  <script src="./data-grades-2-5.js?v=4"></script>
-  <script src="./data-groups.js?v=4"></script>
-  <script src="./app-compiled.js?v=4"></script>
-  <script>
-try {
-  const root = ReactDOM.createRoot(document.getElementById('root'));
-  root.render(React.createElement(App));
-} catch(e) {
-  document.getElementById('error').style.display = 'block';
-  document.getElementById('error').textContent = e.stack;
-}
+    window.onerror = function(msg, src, line, col, err) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent = 'Error: ' + msg + '\nLine: ' + line + '\n' + (err ? err.stack : '');
+      document.getElementById('loader').style.display = 'none';
+    };
+
+    if ('serviceWorker' in navigator && location.hostname !== 'www.claudeusercontent.com') {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(r => console.log('SW registered:', r.scope))
+          .catch(e => console.warn('SW failed:', e));
+      });
+    }
+
+    function setProgress(pct, msg) {
+      document.getElementById('prog').style.width = pct + '%';
+      document.getElementById('load-msg').textContent = msg;
+    }
+
+    // Unpack compact card arrays into the object format app-compiled.js expects
+    // Schema: [kanji, reading, romaji, meaning, region, [kun], [on], [[jp,reading,meaning],...]]
+    function unpackCard(arr) {
+      return {
+        kanji:     arr[0],
+        reading:   arr[1],
+        romaji:    arr[2],
+        meaning:   arr[3],
+        region:    arr[4],
+        kunYomi:   arr[5],
+        onYomi:    arr[6],
+        compounds: arr[7].map(function(c) { return { jp: c[0], reading: c[1], meaning: c[2] }; })
+      };
+    }
+
+    function unpackLibraries(json) {
+      return json.libraries.map(function(lib) {
+        return { id: lib.id, label: lib.label, sublabel: lib.sublabel, emoji: lib.emoji,
+                 group: lib.group, mode: lib.mode, category_key: lib.category_key,
+                 cards: lib.cards.map(unpackCard) };
+      });
+    }
+
+    var V = '?v=5';
+    function fetchJSON(url) {
+      return fetch(url + V).then(function(r) {
+        if (!r.ok) throw new Error('Failed to fetch: ' + url + ' (' + r.status + ')');
+        return r.json();
+      });
+    }
+
+    setProgress(5, 'Loading…');
+    window.GROUPS = [
+  { id:"verbs",       label:"Verbs",        emoji:"⚡", desc:"Common Japanese verbs" },
+  { id:"adjectives",  label:"Adjectives",   emoji:"✨", desc:"い, な, compound and homophone adjectives" },
+  { id:"body_parts",  label:"Body Parts",   emoji:"体", desc:"Anatomy vocabulary" },
+  { id:"fantasy",     label:"Fantasy",      emoji:"⚔️", desc:"Light novel and fantasy vocabulary" },
+  { id:"business",    label:"Business",     emoji:"💼", desc:"Office and work vocabulary" },
+  { id:"bible",       label:"Bible",        emoji:"✝️", desc:"Biblical and Christian vocabulary" },
+  { id:"radicals",    label:"Radicals",     emoji:"🔑", desc:"Kanji grouped by radical" },
+  { id:"misc",        label:"Misc",         emoji:"🗂️", desc:"Cooking, Medical, Golf, Fitness, Politics" },
+  { id:"spicy",       label:"Spicy 🌶️",    emoji:"🌶️", desc:"Adult vocabulary for mature content" },
+  { id:"grade_1",     label:"Grade 1 Kanji", emoji:"🌱", desc:"Elementary school grade 1" },
+  { id:"grade_2",     label:"Grade 2 Kanji", emoji:"🌿", desc:"Elementary school grade 2" },
+  { id:"grade_3",     label:"Grade 3 Kanji", emoji:"📚", desc:"Elementary school grade 3" },
+  { id:"grade_4",     label:"Grade 4 Kanji", emoji:"📗", desc:"Elementary school grade 4" },
+  { id:"grade_5",     label:"Grade 5 Kanji", emoji:"📘", desc:"Elementary school grade 5" },
+  { id:"grade_6",     label:"Grade 6 Kanji", emoji:"📙", desc:"Elementary school grade 6" }];
+    Promise.all([
+      //fetchJSON('./data/groups.json'),
+      //fetchJSON('./data/grammar.json'),
+      //fetchJSON('./data/thematic.json'),
+      //fetchJSON('./data/spicy.json'),
+      fetchJSON('./data/grade1.json'),
+      //fetchJSON('./data/grades2-5.json'),
+    ])
+    .then(function(results) {
+      setProgress(80, 'Unpacking data…');
+      //window.GRAMMAR_LIBRARIES  = unpackLibraries(results[1]);
+      //window.THEMATIC_LIBRARIES = unpackLibraries(results[2]);
+      //window.SPICY_LIBRARIES    = unpackLibraries(results[3]);
+      window.GRAMMAR_LIBRARIES  = [];
+      window.THEMATIC_LIBRARIES = [];
+      window.SPICY_LIBRARIES    = [];
+      window.GRADE_LIBRARIES    = unpackLibraries(results[0]);
+      // results[5] = grades2-5, currently still inline in app-compiled as REMAINING_GRADE_LIBRARIES
+      // Once migrated, set: window.GRADE_2_5_LIBRARIES = unpackLibraries(results[5]);
+      setProgress(92, 'Starting app…');
+    })
+    .then(function() {
+      return new Promise(function(resolve, reject) {
+        var s = document.createElement('script');
+        s.src = './app-compiled.js' + V;
+        s.onload = resolve;
+        s.onerror = function() { reject(new Error('Failed to load app-compiled.js')); };
+        document.head.appendChild(s);
+      });
+    })
+    .then(function() {
+      setProgress(100, 'Ready!');
+      setTimeout(function() {
+        try {
+          var loader = document.getElementById('loader');
+          loader.style.transition = 'opacity 0.3s';
+          loader.style.opacity = '0';
+          setTimeout(function() { loader.style.display = 'none'; }, 300);
+          ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+        } catch(e) {
+          document.getElementById('error').style.display = 'block';
+          document.getElementById('error').textContent = e.stack;
+          document.getElementById('loader').style.display = 'none';
+        }
+      }, 150);
+    })
+    .catch(function(err) {
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('error').textContent =
+        'Load error: ' + err.message + '\n\nCheck that all /data/*.json files are deployed.';
+      document.getElementById('loader').style.display = 'none';
+    });
   </script>
 </body>
 </html>
