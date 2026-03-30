@@ -57,8 +57,9 @@ const BUILTIN_LIBRARIES = [
     ...window.THEMATIC_LIBRARIES,
     ...window.GRAMMAR_LIBRARIES,
     ...window.SPICY_LIBRARIES,
-    ...window.GRADE_LIBRARIES,
+    ...window.GRADE_LIBRARIES
 ];
+const GROUPS = window.GROUPS;
 function App() {
     var _a, _b;
     // ── persistent state (loaded from localStorage) ──
