@@ -1,39 +1,7 @@
 const { useState, useRef, useEffect, useCallback } = React;
 
 
-// ─── OFFLINE / SERVICE WORKER REGISTRATION ───────────────────────────────────
-// Registers an inline SW via blob URL so the app caches itself for offline use.
-// On first load, the SW pre-caches the page. On subsequent loads it serves from cache.
-if (typeof window !== "undefined" && "serviceWorker" in navigator && location.hostname !== "www.claudeusercontent.com") {
-    window.addEventListener("load", () => {
-        // We can't register a blob SW from a cross-origin context (e.g. claude.ai preview),
-        // but when served as a real file:// or http://localhost the block below runs.
-        try {
-            const swCode = `
-const CACHE = "kanji-v1";
-self.addEventListener("install", e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll([self.location.href.replace(/\\/[^\\/]*$/, "/")|| "/"]))
-  );
-  self.skipWaiting();
-});
-self.addEventListener("activate", e => { e.waitUntil(self.clients.claim()); });
-self.addEventListener("fetch", e => {
-  e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request).then(res => {
-      const clone = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, clone));
-      return res;
-    }))
-  );
-});`;
-            const blob = new Blob([swCode], { type: "application/javascript" });
-            const url = URL.createObjectURL(blob);
-            navigator.serviceWorker.register(url).catch(() => { });
-        }
-        catch (_) { }
-    });
-}
+
 // ─── LOCAL STORAGE HELPERS ───────────────────────────────────────────────────
 const LS = {
     get: (k, fallback = null) => {
