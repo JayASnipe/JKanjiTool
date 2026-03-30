@@ -54,11 +54,10 @@ const LS = {
 // ─── COMBINED LIBRARY LIST ───────────────────────────────────────────────────
 // All data loaded from external JS files
 const BUILTIN_LIBRARIES = [
-    ...GRAMMAR_LIBRARIES,
-    ...THEMATIC_LIBRARIES,
-    ...SPICY_LIBRARIES,
-    ...GRADE_LIBRARIES,
-    ...GRADE_LIBRARIES_2_5,
+    ...window.THEMATIC_LIBRARIES,
+    ...window.GRAMMAR_LIBRARIES,
+    ...window.SPICY_LIBRARIES,
+    ...window.GRADE_LIBRARIES,
 ];
 function App() {
     var _a, _b;
