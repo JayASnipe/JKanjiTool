@@ -106,24 +106,21 @@
   { id:"grade_5",     label:"Grade 5 Kanji", emoji:"📘", desc:"Elementary school grade 5" },
   { id:"grade_6",     label:"Grade 6 Kanji", emoji:"📙", desc:"Elementary school grade 6" }];
     Promise.all([
-      //fetchJSON('./data/groups.json'),
-      //fetchJSON('./data/grammar.json'),
-      //fetchJSON('./data/thematic.json'),
-      //fetchJSON('./data/spicy.json'),
+      fetchJSON('./data/grammar.json'),
+      fetchJSON('./data/thematic.json'),
+      fetchJSON('./data/spicy.json'),
       fetchJSON('./data/grade1.json'),
-      //fetchJSON('./data/grades2-5.json'),
+      fetchJSON('./data/grades2-5.json'),
     ])
     .then(function(results) {
       setProgress(80, 'Unpacking data…');
-      //window.GRAMMAR_LIBRARIES  = unpackLibraries(results[1]);
-      //window.THEMATIC_LIBRARIES = unpackLibraries(results[2]);
-      //window.SPICY_LIBRARIES    = unpackLibraries(results[3]);
-      window.GRAMMAR_LIBRARIES  = [];
-      window.THEMATIC_LIBRARIES = [];
-      window.SPICY_LIBRARIES    = [];
-      window.GRADE_LIBRARIES    = unpackLibraries(results[0]);
-      // results[5] = grades2-5, currently still inline in app-compiled as REMAINING_GRADE_LIBRARIES
-      // Once migrated, set: window.GRADE_2_5_LIBRARIES = unpackLibraries(results[5]);
+      window.GRAMMAR_LIBRARIES  = unpackLibraries(results[0]);
+      window.THEMATIC_LIBRARIES = unpackLibraries(results[1]);
+      window.SPICY_LIBRARIES    = unpackLibraries(results[2]);
+      window.GRADE_LIBRARIES    = [
+        ...unpackLibraries(results[3]),
+        ...unpackLibraries(results[4])
+      ];
       setProgress(92, 'Starting app…');
     })
     .then(function() {
