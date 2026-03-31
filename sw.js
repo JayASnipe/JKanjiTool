@@ -1,5 +1,5 @@
 // J Kanji Service Worker v5
-const CACHE = 'kanji-v5';
+const CACHE = 'kanji-v6';
 
 const PRECACHE = [
   './',
@@ -7,13 +7,13 @@ const PRECACHE = [
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
-  './app-compiled.js?v=5',
-  './data/groups.json?v=5',
-  './data/grammar.json?v=5',
-  './data/thematic.json?v=5',
-  './data/spicy.json?v=5',
-  './data/grade1.json?v=5',
-  './data/grades2-5.json?v=5',
+  './app-compiled.js?v=6',
+  './data/groups.json?v=6',
+  './data/grammar.json?v=6',
+  './data/thematic.json?v=6',
+  './data/spicy.json?v=6',
+  './data/grade1.json?v=6',
+  './data/grades2-5.json?v=6',
 ];
 
 self.addEventListener('install', e => {
