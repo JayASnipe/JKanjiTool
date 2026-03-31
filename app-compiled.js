@@ -1,7 +1,4 @@
 const { useState, useRef, useEffect, useCallback } = React;
-
-
-
 // ─── LOCAL STORAGE HELPERS ───────────────────────────────────────────────────
 const LS = {
     get: (k, fallback = null) => {
@@ -18,16 +15,57 @@ const LS = {
     }
     catch (_a) { } },
 };
-// ─── BUILT-IN DATA ────────────────────────────────────────────────────────────
 // ─── COMBINED LIBRARY LIST ───────────────────────────────────────────────────
-// All data loaded from external JS files
+// All data loaded via fetch in index.html and set as window globals before this
+// script is injected. Spicy libraries are included here; visibility is gated by
+// the spicyUnlocked password check in the UI.
 const BUILTIN_LIBRARIES = [
     ...window.THEMATIC_LIBRARIES,
     ...window.GRAMMAR_LIBRARIES,
     ...window.SPICY_LIBRARIES,
-    ...window.GRADE_LIBRARIES
+    ...window.GRADE_LIBRARIES,
 ];
-const GROUPS = window.GROUPS;
+// ─── PURE HELPERS ────────────────────────────────────────────────────────────
+// Parse [漢字|かんじ] markup into segments for ruby rendering
+function parseRuby(text) {
+    const parts = [];
+    const re = /\[([^\|]+)\|([^\]]+)\]/g;
+    let last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+        if (m.index > last)
+            parts.push({ type: "text", val: text.slice(last, m.index) });
+        parts.push({ type: "ruby", kanji: m[1], reading: m[2] });
+        last = re.lastIndex;
+    }
+    if (last < text.length)
+        parts.push({ type: "text", val: text.slice(last) });
+    return parts;
+}
+// Strip [漢字|かんじ] markup to plain Japanese for speech synthesis
+function stripRuby(text) {
+    return text.replace(/\[([^\|]+)\|([^\]]+)\]/g, '$1');
+}
+// Ruby text renderer — shows furigana on hover (desktop) or tap (mobile)
+function RubyText({ text, id, pinnedWords, hoveredWord, isMobile, setHoveredWord, setPinnedWords }) {
+    const segments = parseRuby(text);
+    const toggle = (wordId) => setPinnedWords(prev => {
+        const n = new Set(prev);
+        n.has(wordId) ? n.delete(wordId) : n.add(wordId);
+        return n;
+    });
+    return (React.createElement("span", null, segments.map((seg, si) => {
+        if (seg.type === "text")
+            return React.createElement("span", { key: si }, seg.val);
+        const wordId = `${id}-${si}`;
+        const showFuri = pinnedWords.has(wordId) || (!isMobile && hoveredWord === wordId);
+        if (showFuri) {
+            return (React.createElement("ruby", { key: si, onMouseLeave: () => !isMobile && setHoveredWord(null), onClick: () => isMobile && toggle(wordId), style: { cursor: isMobile ? "pointer" : "default" } },
+                seg.kanji,
+                React.createElement("rt", null, seg.reading)));
+        }
+        return (React.createElement("span", { key: si, onMouseEnter: () => !isMobile && setHoveredWord(wordId), onClick: () => isMobile && toggle(wordId), style: { cursor: isMobile ? "pointer" : "default", borderBottom: isMobile ? "1px dotted #bbb" : "none" } }, seg.kanji));
+    })));
+}
 function App() {
     var _a, _b;
     // ── persistent state (loaded from localStorage) ──
@@ -258,25 +296,6 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
         }
         setReadLoading(false);
     }
-    // Parse [漢字|かんじ] markup into segments for ruby rendering
-    function parseRuby(text) {
-        const parts = [];
-        const re = /\[([^\|]+)\|([^\]]+)\]/g;
-        let last = 0, m;
-        while ((m = re.exec(text)) !== null) {
-            if (m.index > last)
-                parts.push({ type: "text", val: text.slice(last, m.index) });
-            parts.push({ type: "ruby", kanji: m[1], reading: m[2] });
-            last = re.lastIndex;
-        }
-        if (last < text.length)
-            parts.push({ type: "text", val: text.slice(last) });
-        return parts;
-    }
-    // Strip [漢字|かんじ] markup down to plain Japanese for speech
-    function stripRuby(text) {
-        return text.replace(/\[([^\|]+)\|([^\]]+)\]/g, '$1');
-    }
     function speakText(text, idx) {
         if (!window.speechSynthesis)
             return;
@@ -489,28 +508,46 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
         libOpt: { display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderBottom: "1px solid #f0f0f0" },
         cb: { padding: "7px 14px", border: "1px solid", borderRadius: 4, fontSize: "0.78rem", cursor: "pointer", fontFamily: "monospace", minWidth: 46 },
         toggle: (on) => ({ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: on ? "#1a1008" : "#faf6ee", border: "1px solid #ddd", borderRadius: 6, cursor: "pointer", fontFamily: "monospace", fontSize: "0.73rem", color: on ? "#f5efe3" : "#555", width: "100%", marginBottom: 8 }),
+        optBtn: (active, extra) => (Object.assign({ flex: 1, padding: "8px 6px", borderRadius: 8, border: `2px solid ${active ? "#1a1008" : "#ddd"}`, background: active ? "#1a1008" : "#faf6ee", color: active ? "#f5efe3" : "#1a1008", cursor: "pointer", fontWeight: 600 }, extra)),
+        sectionLabel: (extra) => (Object.assign({ fontSize: "0.68rem", color: "#888", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 }, extra)),
         reviewBtn: (on) => ({ padding: "4px 10px", borderRadius: 20, border: on ? "2px solid #c0392b" : "2px solid #bbb", background: on ? "#c0392b" : "white", cursor: "pointer", fontSize: "0.85rem", fontFamily: "serif", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: on ? "white" : "#888", boxShadow: on ? "0 2px 8px rgba(192,57,43,0.35)" : "none", letterSpacing: "0.05em" }),
     };
+    // ── Shared compound card layout: mobile=3 rows, desktop=kanji||reading + meaning ──
+    // meaningColor: text color for the meaning span
+    // meaningVisible: false = visibility:hidden (layout preserved, text hidden)
+    function renderCompoundFull(opt, meaningColor, _col, meaningVisible) {
+        return isMobile ? (React.createElement(React.Fragment, null,
+            React.createElement("span", { style: { fontFamily: "serif", fontSize: bigFont ? "3.2rem" : "1.6rem", fontWeight: 600 } }, opt.jp),
+            React.createElement("span", { style: { fontSize: bigFont ? "2rem" : "1rem", color: "#c0392b", fontWeight: 600 } }, opt.reading),
+            React.createElement("span", { style: { fontSize: bigFont ? "1.5rem" : "0.75rem", lineHeight: 1.3, textAlign: "center", color: meaningColor,
+                    visibility: meaningVisible ? "visible" : "hidden" } }, opt.meaning))) : (React.createElement(React.Fragment, null,
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, fontFamily: "serif" } },
+                React.createElement("span", { style: { fontSize: bigFont ? "3rem" : "1.5rem", fontWeight: 600 } }, opt.jp),
+                React.createElement("span", { style: { color: "#ccc", fontSize: bigFont ? "2rem" : "1rem", fontWeight: 400 } }, "||"),
+                React.createElement("span", { style: { fontSize: bigFont ? "1.8rem" : "0.9rem", color: "#c0392b", fontWeight: 600 } }, opt.reading)),
+            React.createElement("span", { style: { fontSize: bigFont ? "1.44rem" : "0.72rem", lineHeight: 1.3, textAlign: "center", color: meaningColor,
+                    visibility: meaningVisible ? "visible" : "hidden" } }, opt.meaning)));
+    }
     const totalQuizPoints = quizScore + quizBonusTotal;
     // Max possible: 1 base pt + 5 speed bonus pts per question
     const maxQuizPoints = quizTimerEnabled ? quizCards.length * 6 : quizCards.length;
     return (React.createElement("div", { style: S.root },
-        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, width: "100%" } },
-            React.createElement("button", { onClick: () => { setShowSpicyPrompt(p => !p); setSpicyInput(""); setSpicyError(false); }, style: { width: 36, height: 36, background: "transparent", border: "none", cursor: "default", flexShrink: 0 } }, "　"),
-            React.createElement("div", { style: { textAlign: "center", flex: 1 } },
-                React.createElement("div", { style: { fontFamily: "serif", fontSize: "2rem", fontWeight: 700, letterSpacing: "0.05em" } }, "J Kanji Tool"),
-                React.createElement("div", { style: { fontSize: "0.6rem", letterSpacing: "0.2em", color: "#aaa", textTransform: "uppercase" } }, "Japanese Kanji Study \u00B7 \u6F22\u5B57\u5B66\u7FD2")),
-                React.createElement("button", { onClick: () => {
+        React.createElement("div", { style: { textAlign: "center", marginBottom: 10, position: "relative", width: "100%" } },
+            React.createElement("div", { style: { fontFamily: "serif", fontSize: "2rem", fontWeight: 700, letterSpacing: "0.05em" } }, "J Kanji Tool"),
+            React.createElement("div", { style: { fontSize: "0.6rem", letterSpacing: "0.2em", color: "#aaa", textTransform: "uppercase" } }, "Japanese Kanji Study \u00B7 \u6F22\u5B57\u5B66\u7FD2"),
+            React.createElement("button", { title: "Clear cache and reload", onClick: () => {
                     if ('serviceWorker' in navigator) {
-                        caches.keys().then(function(keys) {
-                            Promise.all(keys.map(function(k) { return caches.delete(k); }))
-                            .then(function() { window.location.reload(); });
-                    });
-                    } else { window.location.reload();}
-                    }, title: "Check for updates!!!", style: { width: 36, height: 36, background: "transparent", border: "none", cursor: "pointer",
-                    fontSize: "1.1rem", color: "#bbb", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" } }, "\u21BB")),
-                            React.createElement("div", { style: { width: "100%", marginBottom: 10, position: "relative" } },
-                React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "stretch", width: "100%" } },
+                        caches.keys().then(function (keys) {
+                            Promise.all(keys.map(function (k) { return caches.delete(k); }))
+                                .then(function () { window.location.reload(); });
+                        });
+                    }
+                    else {
+                        window.location.reload();
+                    }
+                }, style: { position: "absolute", top: 0, right: 0, background: "none", border: "none", cursor: "pointer", fontSize: "0.85rem", color: "#ccc", padding: "4px 6px" } }, "\u21BA")),
+        React.createElement("div", { style: { width: "100%", marginBottom: 10, position: "relative" } },
+            React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "stretch", width: "100%" } },
                 React.createElement("button", { onClick: () => { setShowLib(p => !p); setActiveGroup(null); }, style: Object.assign(Object.assign({}, S.libBtn), { flex: 1 }) },
                     React.createElement("span", { style: { fontWeight: 600 } }, lib.id === REVIEW_LIB_ID
                         ? "🔖 Kanji for Review"
@@ -518,7 +555,9 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
                             const g = GROUPS.find(g => g.id === lib.group);
                             return `${lib.emoji} ${g ? g.label + " · " : ""}${lib.label}`;
                         })()),
-                    React.createElement("span", { style: { fontSize: "0.65rem", color: "#aaa" } }, showLib ? "▴ close" : "▾ change library"))),
+                    React.createElement("span", { style: { fontSize: "0.65rem", color: "#aaa" } }, showLib ? "▴ close" : "▾ change library")),
+                React.createElement("button", { onClick: () => { setShowSpicyPrompt(p => !p); setSpicyInput(""); setSpicyError(false); }, style: { padding: "0 10px", borderRadius: 3, border: "none",
+                        background: "transparent", cursor: "default", color: "transparent", userSelect: "none" } }, "　")),
             showSpicyPrompt && (React.createElement("div", { style: { background: "#faf6ee", border: "1px solid #e8dcc8", borderRadius: 6, padding: "10px 12px", marginTop: 4 } },
                 spicyUnlocked ? (React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } },
                     React.createElement("span", { style: { fontSize: "0.72rem", color: "#888" } }, "Unlocked"),
@@ -720,10 +759,7 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
                     { key: "kanji", label: "漢字", sub: "Kanji → Reading" },
                     { key: "compounds", label: "熟語", sub: "Compound → Reading" },
                     { key: "compounds_reverse", label: "英語", sub: "English → Compound" },
-                ].map(({ key, label, sub }) => (React.createElement("button", { key: key, onClick: () => setQuizType(key), style: { flex: 1, padding: "10px 6px", borderRadius: 8, border: `2px solid ${quizType === key ? "#1a1008" : "#ddd"}`,
-                        background: quizType === key ? "#1a1008" : "#faf6ee",
-                        color: quizType === key ? "#f5efe3" : "#1a1008",
-                        cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 } },
+                ].map(({ key, label, sub }) => (React.createElement("button", { key: key, onClick: () => setQuizType(key), style: S.optBtn(quizType === key, { padding: "10px 6px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }) },
                     React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.3rem" } }, label),
                     React.createElement("span", { style: { fontSize: "0.58rem", opacity: 0.7, letterSpacing: "0.04em", textAlign: "center" } }, sub))))),
                 React.createElement("div", { style: { textAlign: "center", fontSize: "0.75rem", color: "#888", marginBottom: 18 } }, "How many questions?"),
@@ -735,16 +771,12 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
                             quizTimerEnabled ? "— ON" : "— Off"),
                         React.createElement("span", { style: { fontSize: "0.62rem", opacity: 0.7 } }, quizTimerEnabled ? "10s per question · faster = bonus pts" : "tap to enable"))),
                 quizType === "compounds" && (React.createElement("div", { style: { marginBottom: 16 } },
-                    React.createElement("div", { style: { fontSize: "0.68rem", color: "#888", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8, textAlign: "center" } }, "Answer format"),
+                    React.createElement("div", { style: S.sectionLabel({ marginBottom: 8, textAlign: "center" }) }, "Answer format"),
                     React.createElement("div", { style: { display: "flex", gap: 6 } }, [
                         { key: "traditional", label: "Japanese / English" },
                         { key: "japanese", label: "Japanese" },
                         { key: "english", label: "English" },
-                    ].map(({ key, label }) => (React.createElement("button", { key: key, onClick: () => setAnswerStyle(key), style: { flex: 1, padding: "10px 4px", borderRadius: 8,
-                            border: `2px solid ${answerStyle === key ? "#1a1008" : "#ddd"}`,
-                            background: answerStyle === key ? "#1a1008" : "#faf6ee",
-                            color: answerStyle === key ? "#f5efe3" : "#1a1008",
-                            cursor: "pointer", alignItems: "center", justifyContent: "center" } },
+                    ].map(({ key, label }) => (React.createElement("button", { key: key, onClick: () => setAnswerStyle(key), style: S.optBtn(answerStyle === key, { padding: "10px 4px", alignItems: "center", justifyContent: "center" }) },
                         React.createElement("span", { style: { fontSize: "0.75rem", fontWeight: 600 } }, label))))))),
                 quizType === "compounds_reverse" && (React.createElement("div", { style: { marginBottom: 16 } },
                     React.createElement("button", { style: S.toggle(quizDifficulty === "hard"), onClick: () => setQuizDifficulty(d => d === "easy" ? "hard" : "easy") },
@@ -801,36 +833,14 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
                         quizType === "kanji" && (React.createElement(React.Fragment, null,
                             React.createElement("span", { style: { fontFamily: "serif", fontSize: bigFont ? "2.2rem" : "1.1rem", fontWeight: 600 } }, opt.reading),
                             React.createElement("span", { style: { fontSize: bigFont ? "1.44rem" : "0.72rem", marginTop: 2, lineHeight: 1.3, textAlign: "center" } }, opt.meaning))),
-                        quizType === "compounds" && (React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 5, width: "100%", justifyContent: "center" } }, quizAnswered ? (
-                        /* Post-answer: mobile=3 rows, desktop=kanji || reading + english */
-                        isMobile ? (React.createElement(React.Fragment, null,
-                            React.createElement("span", { style: { fontFamily: "serif", fontSize: bigFont ? "3.2rem" : "1.6rem", fontWeight: 600 } }, opt.jp),
-                            React.createElement("span", { style: { fontSize: bigFont ? "2rem" : "1rem", color: "#c0392b", fontWeight: 600 } }, opt.reading),
-                            React.createElement("span", { style: { fontSize: bigFont ? "1.5rem" : "0.75rem", lineHeight: 1.3, textAlign: "center", color: col } }, opt.meaning))) : (React.createElement(React.Fragment, null,
-                            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, fontFamily: "serif" } },
-                                React.createElement("span", { style: { fontSize: bigFont ? "3rem" : "1.5rem", fontWeight: 600 } }, opt.jp),
-                                React.createElement("span", { style: { color: "#ccc", fontSize: bigFont ? "2rem" : "1rem", fontWeight: 400 } }, "||"),
-                                React.createElement("span", { style: { fontSize: bigFont ? "1.8rem" : "0.9rem", color: "#c0392b", fontWeight: 600 } }, opt.reading)),
-                            React.createElement("span", { style: { fontSize: bigFont ? "1.44rem" : "0.72rem", lineHeight: 1.3, textAlign: "center", color: col } }, opt.meaning)))) : (
+                        quizType === "compounds" && (React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 5, width: "100%", justifyContent: "center" } }, quizAnswered ? renderCompoundFull(opt, col, col, true) : (
                         /* Pre-answer: based on answerStyle */
                         React.createElement(React.Fragment, null,
                             (answerStyle === "traditional" || answerStyle === "japanese") && (React.createElement("span", { style: { fontFamily: "serif", fontSize: bigFont ? "2.2rem" : "1.1rem", fontWeight: 600 } }, opt.reading)),
                             (answerStyle === "traditional" || answerStyle === "english") && (React.createElement("span", { style: { fontSize: answerStyle === "english" ? (bigFont ? "2.16rem" : "1.08rem") : (bigFont ? "1.44rem" : "0.72rem"), lineHeight: 1.3, textAlign: "center", fontWeight: answerStyle === "english" ? 600 : 400 } }, opt.meaning)))))),
-                        quizType === "compounds_reverse" && (React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 5, width: "100%", justifyContent: "center" } }, quizDifficulty === "hard" && !quizAnswered ? (React.createElement("span", { style: { fontFamily: "serif", fontSize: bigFont ? "4rem" : "2rem", fontWeight: 600 } }, opt.jp)) : isMobile ? (
-                        /* Mobile: three rows */
-                        React.createElement(React.Fragment, null,
-                            React.createElement("span", { style: { fontFamily: "serif", fontSize: bigFont ? "3.2rem" : "1.6rem", fontWeight: 600 } }, opt.jp),
-                            React.createElement("span", { style: { fontSize: bigFont ? "2rem" : "1rem", color: "#c0392b", fontWeight: 600 } }, opt.reading),
-                            React.createElement("span", { style: { fontSize: bigFont ? "1.5rem" : "0.75rem", lineHeight: 1.3, textAlign: "center", color: quizAnswered ? col : "#888",
-                                    visibility: quizAnswered ? "visible" : "hidden" } }, opt.meaning))) : (
-                        /* Desktop: kanji || reading row + english */
-                        React.createElement(React.Fragment, null,
-                            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, fontFamily: "serif" } },
-                                React.createElement("span", { style: { fontSize: bigFont ? "3rem" : "1.5rem", fontWeight: 600 } }, opt.jp),
-                                React.createElement("span", { style: { color: "#ccc", fontSize: bigFont ? "2rem" : "1rem", fontWeight: 400 } }, "||"),
-                                React.createElement("span", { style: { fontSize: bigFont ? "1.8rem" : "0.9rem", color: "#c0392b", fontWeight: 600 } }, opt.reading)),
-                            React.createElement("span", { style: { fontSize: bigFont ? "1.44rem" : "0.72rem", lineHeight: 1.3, textAlign: "center", color: quizAnswered ? col : "#888",
-                                    visibility: quizAnswered ? "visible" : "hidden" } }, opt.meaning)))))));
+                        quizType === "compounds_reverse" && (React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 5, width: "100%", justifyContent: "center" } }, quizDifficulty === "hard" && !quizAnswered
+                            ? React.createElement("span", { style: { fontFamily: "serif", fontSize: bigFont ? "4rem" : "2rem", fontWeight: 600 } }, opt.jp)
+                            : renderCompoundFull(opt, quizAnswered ? col : "#888", quizAnswered ? col : "#888", !!quizAnswered)))));
                 })),
                 quizAnswered && React.createElement("button", { style: S.btn, onClick: nextQ }, quizIdx + 1 >= quizCards.length ? "See Results →" : "Next →"))),
             quizDone && (() => {
@@ -906,36 +916,32 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
         mode === "read" && (React.createElement("div", { style: { width: "100%", padding: "4px 0" } },
             !readContent && !readLoading && (React.createElement(React.Fragment, null,
                 React.createElement("div", { style: { marginBottom: 14 } },
-                    React.createElement("div", { style: { fontSize: "0.68rem", color: "#888", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 } }, "Source"),
-                    React.createElement("div", { style: { display: "flex", gap: 6 } }, [["library", "This Library"], ["card", "This Card"]].map(([k, l]) => (React.createElement("button", { key: k, onClick: () => setReadScope(k), style: { flex: 1, padding: "8px 6px", borderRadius: 8, border: `2px solid ${readScope === k ? "#1a1008" : "#ddd"}`, background: readScope === k ? "#1a1008" : "#faf6ee", color: readScope === k ? "#f5efe3" : "#1a1008", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600 } }, l))))),
+                    React.createElement("div", { style: S.sectionLabel() }, "Source"),
+                    React.createElement("div", { style: { display: "flex", gap: 6 } }, [["library", "This Library"], ["card", "This Card"]].map(([k, l]) => (React.createElement("button", { key: k, onClick: () => setReadScope(k), style: S.optBtn(readScope === k, { fontSize: "0.75rem" }) }, l))))),
                 React.createElement("div", { style: { marginBottom: 14 } },
-                    React.createElement("div", { style: { fontSize: "0.68rem", color: "#888", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 } }, "Format"),
-                    React.createElement("div", { style: { display: "flex", gap: 6 } }, [["sentences", "Sentences"], ["story", "Story"]].map(([k, l]) => (React.createElement("button", { key: k, onClick: () => setReadType(k), style: { flex: 1, padding: "8px 6px", borderRadius: 8, border: `2px solid ${readType === k ? "#1a1008" : "#ddd"}`, background: readType === k ? "#1a1008" : "#faf6ee", color: readType === k ? "#f5efe3" : "#1a1008", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600 } }, l))))),
+                    React.createElement("div", { style: S.sectionLabel() }, "Format"),
+                    React.createElement("div", { style: { display: "flex", gap: 6 } }, [["sentences", "Sentences"], ["story", "Story"]].map(([k, l]) => (React.createElement("button", { key: k, onClick: () => setReadType(k), style: S.optBtn(readType === k, { fontSize: "0.75rem" }) }, l))))),
                 React.createElement("div", { style: { marginBottom: 14 } },
-                    React.createElement("div", { style: { fontSize: "0.68rem", color: "#888", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 } }, "JLPT Level"),
-                    React.createElement("div", { style: { display: "flex", gap: 6 } }, ["N5", "N4", "N3"].map(l => (React.createElement("button", { key: l, onClick: () => setReadLevel(l), style: { flex: 1, padding: "8px 6px", borderRadius: 8, border: `2px solid ${readLevel === l ? "#1a1008" : "#ddd"}`, background: readLevel === l ? "#1a1008" : "#faf6ee", color: readLevel === l ? "#f5efe3" : "#1a1008", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600 } }, l))))),
+                    React.createElement("div", { style: S.sectionLabel() }, "JLPT Level"),
+                    React.createElement("div", { style: { display: "flex", gap: 6 } }, ["N5", "N4", "N3"].map(l => (React.createElement("button", { key: l, onClick: () => setReadLevel(l), style: S.optBtn(readLevel === l, { fontSize: "0.75rem" }) }, l))))),
                 readType === "sentences" ? (React.createElement("div", { style: { marginBottom: 20 } },
-                    React.createElement("div", { style: { fontSize: "0.68rem", color: "#888", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 } }, "Number of Sentences"),
-                    React.createElement("div", { style: { display: "flex", gap: 6 } }, [5, 10, 15].map(n => (React.createElement("button", { key: n, onClick: () => setReadCount(n), style: { flex: 1, padding: "8px 6px", borderRadius: 8, border: `2px solid ${readCount === n ? "#1a1008" : "#ddd"}`, background: readCount === n ? "#1a1008" : "#faf6ee", color: readCount === n ? "#f5efe3" : "#1a1008", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600 } }, n)))))) : (React.createElement("div", { style: { marginBottom: 20 } },
-                    React.createElement("div", { style: { fontSize: "0.68rem", color: "#888", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 } }, "Story Length"),
-                    React.createElement("div", { style: { display: "flex", gap: 6 } }, [["short", "Short (~200)"], ["medium", "Medium (~500)"], ["long", "Long (~800)"]].map(([k, l]) => (React.createElement("button", { key: k, onClick: () => setReadLength(k), style: { flex: 1, padding: "8px 6px", borderRadius: 8, border: `2px solid ${readLength === k ? "#1a1008" : "#ddd"}`, background: readLength === k ? "#1a1008" : "#faf6ee", color: readLength === k ? "#f5efe3" : "#1a1008", cursor: "pointer", fontSize: "0.72rem", fontWeight: 600 } }, l)))))),
+                    React.createElement("div", { style: S.sectionLabel() }, "Number of Sentences"),
+                    React.createElement("div", { style: { display: "flex", gap: 6 } }, [5, 10, 15].map(n => (React.createElement("button", { key: n, onClick: () => setReadCount(n), style: S.optBtn(readCount === n, { fontSize: "0.75rem" }) }, n)))))) : (React.createElement("div", { style: { marginBottom: 20 } },
+                    React.createElement("div", { style: S.sectionLabel() }, "Story Length"),
+                    React.createElement("div", { style: { display: "flex", gap: 6 } }, [["short", "Short (~200)"], ["medium", "Medium (~500)"], ["long", "Long (~800)"]].map(([k, l]) => (React.createElement("button", { key: k, onClick: () => setReadLength(k), style: S.optBtn(readLength === k, { fontSize: "0.72rem" }) }, l)))))),
                 React.createElement("button", { style: Object.assign(Object.assign({}, S.btn), { width: "100%", padding: "12px" }), onClick: generateRead }, "Generate \u2726"),
                 React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, margin: "18px 0 14px" } },
                     React.createElement("div", { style: { flex: 1, height: 1, background: "#e8dcc8" } }),
                     React.createElement("span", { style: { fontSize: "0.62rem", color: "#bbb", letterSpacing: "0.12em", textTransform: "uppercase" } }, "or"),
                     React.createElement("div", { style: { flex: 1, height: 1, background: "#e8dcc8" } })),
                 React.createElement("div", { style: { marginBottom: 12 } },
-                    React.createElement("div", { style: { fontSize: "0.68rem", color: "#888", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 } }, "Adventure Theme"),
+                    React.createElement("div", { style: S.sectionLabel() }, "Adventure Theme"),
                     React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } }, [
                         { key: "fantasy", label: "⚔️ Fantasy" },
                         { key: "mystery", label: "🔍 Mystery" },
                         { key: "slice", label: "🌸 Slice of Life" },
                         { key: "historical", label: "🏯 Historical" },
-                    ].map(({ key, label }) => (React.createElement("button", { key: key, onClick: () => setCyoaTheme(key), style: { flex: 1, minWidth: "45%", padding: "8px 6px", borderRadius: 8,
-                            border: `2px solid ${cyoaTheme === key ? "#1a1008" : "#ddd"}`,
-                            background: cyoaTheme === key ? "#1a1008" : "#faf6ee",
-                            color: cyoaTheme === key ? "#f5efe3" : "#1a1008",
-                            cursor: "pointer", fontSize: "0.72rem", fontWeight: 600 } }, label))))),
+                    ].map(({ key, label }) => (React.createElement("button", { key: key, onClick: () => setCyoaTheme(key), style: S.optBtn(cyoaTheme === key, { minWidth: "45%", fontSize: "0.72rem" }) }, label))))),
                 (() => {
                     const prompt = buildCYOAPrompt();
                     const encoded = encodeURIComponent(prompt);
@@ -957,33 +963,6 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
                 React.createElement("div", { style: { color: "#c0392b", marginBottom: 12, fontSize: "0.8rem" } }, readError),
                 React.createElement("button", { style: S.btn, onClick: generateRead }, "Try Again"))),
             readContent && !readLoading && (() => {
-                // Ruby renderer — only wraps in <ruby> when furigana should show
-                // Desktop: hover state tracked per-word; Mobile: tap toggles
-                const RubyText = ({ text, id }) => {
-                    const segments = parseRuby(text);
-                    return (React.createElement("span", null, segments.map((seg, si) => {
-                        if (seg.type === "text")
-                            return React.createElement("span", { key: si }, seg.val);
-                        const wordId = `${id}-${si}`;
-                        const tapped = pinnedWords.has(wordId);
-                        const hovered = hoveredWord === wordId;
-                        const showFuri = tapped || (!isMobile && hovered);
-                        if (showFuri) {
-                            return (React.createElement("ruby", { key: si, onMouseLeave: () => !isMobile && setHoveredWord(null), onClick: () => isMobile && setPinnedWords(prev => {
-                                    const n = new Set(prev);
-                                    n.has(wordId) ? n.delete(wordId) : n.add(wordId);
-                                    return n;
-                                }), style: { cursor: isMobile ? "pointer" : "default" } },
-                                seg.kanji,
-                                React.createElement("rt", null, seg.reading)));
-                        }
-                        return (React.createElement("span", { key: si, onMouseEnter: () => !isMobile && setHoveredWord(wordId), onClick: () => isMobile && setPinnedWords(prev => {
-                                const n = new Set(prev);
-                                n.has(wordId) ? n.delete(wordId) : n.add(wordId);
-                                return n;
-                            }), style: { cursor: isMobile ? "pointer" : "default", borderBottom: isMobile ? "1px dotted #bbb" : "none" } }, seg.kanji));
-                    })));
-                };
                 const isStory = !Array.isArray(readContent);
                 const items = isStory ? readContent.paragraphs : readContent;
                 return (React.createElement("div", { style: { width: "100%" } },
@@ -994,7 +973,7 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
                     isMobile && pinnedWords.size > 0 && (React.createElement("div", { style: { textAlign: "right", marginBottom: 8 } },
                         React.createElement("button", { onClick: () => setPinnedWords(new Set()), style: Object.assign(Object.assign({}, S.ghost), { fontSize: "0.65rem", padding: "4px 10px" }) }, "Clear furigana"))),
                     isStory && readContent.title && (React.createElement("div", { style: { fontFamily: "serif", fontSize: "1.2rem", fontWeight: 700, color: "#1a1008", marginBottom: 16, textAlign: "center" } },
-                        React.createElement(RubyText, { text: readContent.title, id: "title" }))),
+                        React.createElement(RubyText, { text: readContent.title, id: "title", pinnedWords: pinnedWords, hoveredWord: hoveredWord, isMobile: isMobile, setHoveredWord: setHoveredWord, setPinnedWords: setPinnedWords }))),
                     React.createElement("div", { style: { display: "flex", justifyContent: "flex-end", marginBottom: 10 } }, speakingIdx === "all" ? (React.createElement("button", { onClick: stopSpeaking, style: Object.assign(Object.assign({}, S.ghost), { fontSize: "0.7rem", padding: "5px 12px" }) }, "\u23F9 Stop")) : (React.createElement("button", { onClick: () => speakAll(items), style: Object.assign(Object.assign({}, S.ghost), { fontSize: "0.7rem", padding: "5px 12px" }) }, "\u25B6 Play All"))),
                     items.map((item, i) => {
                         const revealed = revealedTranslations.has(i);
@@ -1005,7 +984,7 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
                                     !isStory && React.createElement("span", { style: { fontSize: "0.62rem", color: "#ccc", marginRight: 6 } },
                                         i + 1,
                                         "."),
-                                    React.createElement(RubyText, { text: item.jp, id: `item-${i}` })),
+                                    React.createElement(RubyText, { text: item.jp, id: `item-${i}`, pinnedWords: pinnedWords, hoveredWord: hoveredWord, isMobile: isMobile, setHoveredWord: setHoveredWord, setPinnedWords: setPinnedWords })),
                                 React.createElement("button", { onClick: () => isSpeaking ? stopSpeaking() : speakText(item.jp, i), style: { flexShrink: 0, marginTop: 6, background: "none", border: "none", cursor: "pointer",
                                         fontSize: "1.1rem", color: isSpeaking ? "#27ae60" : "#bbb",
                                         transition: "color 0.2s" } }, isSpeaking ? "⏹" : "🔊")),
