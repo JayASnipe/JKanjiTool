@@ -8,7 +8,6 @@ const PRECACHE = [
   './icon-192.png',
   './icon-512.png',
   './app-compiled.js?v=6',
-  './data/groups.json?v=6',
   './data/grammar.json?v=6',
   './data/thematic.json?v=6',
   './data/spicy.json?v=6',
