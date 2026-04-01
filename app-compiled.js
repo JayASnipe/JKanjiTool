@@ -66,6 +66,148 @@ function RubyText({ text, id, pinnedWords, hoveredWord, isMobile, setHoveredWord
         return (React.createElement("span", { key: si, onMouseEnter: () => !isMobile && setHoveredWord(wordId), onClick: () => isMobile && toggle(wordId), style: { cursor: isMobile ? "pointer" : "default", borderBottom: isMobile ? "1px dotted #bbb" : "none" } }, seg.kanji));
     })));
 }
+function StatsModal({ sessions, onClose, onReset }) {
+    const [confirmReset, setConfirmReset] = useState(false);
+    if (sessions.length === 0) {
+        return (React.createElement("div", { style: overlayStyle, onClick: onClose },
+            React.createElement("div", { style: modalStyle, onClick: e => e.stopPropagation() },
+                React.createElement("div", { style: modalHeaderStyle },
+                    React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.1rem" } }, "\uD83D\uDCCA Study Stats"),
+                    React.createElement("button", { onClick: onClose, style: closeBtnStyle }, "\u2715")),
+                React.createElement("div", { style: { textAlign: "center", padding: "40px 0", color: "#aaa", fontSize: "0.85rem" } }, "No sessions yet \u2014 complete a quiz to start tracking!"))));
+    }
+    // ── derived stats ──
+    const totalSessions = sessions.length;
+    const totalQuestions = sessions.reduce((s, e) => s + e.total, 0);
+    const totalCorrect = sessions.reduce((s, e) => s + e.score, 0);
+    const overallPct = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
+    // ── heatmap: last 84 days (12 weeks) ──
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dayMs = 86400000;
+    // Build a map: dateStr -> question count
+    const dayMap = {};
+    sessions.forEach(s => {
+        const d = new Date(s.date);
+        d.setHours(0, 0, 0, 0);
+        const key = d.toISOString().slice(0, 10);
+        dayMap[key] = (dayMap[key] || 0) + s.total;
+    });
+    // Build 84-cell grid starting from the most recent Sunday going back 12 weeks
+    const startDay = new Date(today);
+    startDay.setDate(startDay.getDate() - startDay.getDay()); // rewind to Sunday
+    startDay.setDate(startDay.getDate() - 77); // go back 11 more weeks (12 total)
+    const cells = [];
+    for (let i = 0; i < 84; i++) {
+        const d = new Date(startDay.getTime() + i * dayMs);
+        const key = d.toISOString().slice(0, 10);
+        const count = dayMap[key] || 0;
+        const isFuture = d > today;
+        cells.push({ key, count, isFuture, dayOfWeek: d.getDay(), date: d });
+    }
+    const maxCount = Math.max(...cells.map(c => c.count), 1);
+    function heatColor(count, isFuture) {
+        if (isFuture || count === 0)
+            return "#e8dcc8";
+        const intensity = count / maxCount;
+        if (intensity < 0.25)
+            return "#c8e6c9";
+        if (intensity < 0.5)
+            return "#81c784";
+        if (intensity < 0.75)
+            return "#388e3c";
+        return "#1b5e20";
+    }
+    const dayLabels = ["S", "M", "T", "W", "T", "F", "S"];
+    // ── per-library breakdown ──
+    const libMap = {};
+    sessions.forEach(s => {
+        if (!libMap[s.library])
+            libMap[s.library] = { label: s.libraryLabel, sessions: 0, correct: 0, total: 0, bestPct: 0 };
+        const entry = libMap[s.library];
+        entry.sessions++;
+        entry.correct += s.score;
+        entry.total += s.total;
+        const pct = s.total > 0 ? Math.round((s.score / s.total) * 100) : 0;
+        if (pct > entry.bestPct)
+            entry.bestPct = pct;
+    });
+    const libRows = Object.values(libMap).sort((a, b) => b.sessions - a.sessions);
+    return (React.createElement("div", { style: overlayStyle, onClick: onClose },
+        React.createElement("div", { style: Object.assign(Object.assign({}, modalStyle), { maxHeight: "85vh", overflowY: "auto" }), onClick: e => e.stopPropagation() },
+            React.createElement("div", { style: modalHeaderStyle },
+                React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.1rem" } }, "\uD83D\uDCCA Study Stats"),
+                React.createElement("button", { onClick: onClose, style: closeBtnStyle }, "\u2715")),
+            React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 20 } }, [
+                { label: "Sessions", value: totalSessions },
+                { label: "Questions", value: totalQuestions },
+                { label: "Accuracy", value: overallPct + "%" },
+            ].map(({ label, value }) => (React.createElement("div", { key: label, style: { flex: 1, background: "#faf6ee", border: "1px solid #e8dcc8", borderRadius: 6, padding: "10px 6px", textAlign: "center" } },
+                React.createElement("div", { style: { fontFamily: "serif", fontSize: "1.5rem", fontWeight: 700, color: "#1a1008" } }, value),
+                React.createElement("div", { style: { fontSize: "0.6rem", color: "#aaa", letterSpacing: "0.1em", textTransform: "uppercase", marginTop: 2 } }, label))))),
+            React.createElement("div", { style: { marginBottom: 20 } },
+                React.createElement("div", { style: { fontSize: "0.65rem", color: "#aaa", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 } }, "Activity \u2014 Last 12 Weeks"),
+                React.createElement("div", { style: { display: "flex", gap: 2 } },
+                    React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2, marginRight: 2 } }, dayLabels.map((d, i) => (React.createElement("div", { key: i, style: { width: 10, height: 10, fontSize: "0.45rem", color: "#bbb", display: "flex", alignItems: "center", justifyContent: "center" } }, i % 2 === 1 ? d : "")))),
+                    Array.from({ length: 12 }, (_, week) => (React.createElement("div", { key: week, style: { display: "flex", flexDirection: "column", gap: 2 } }, Array.from({ length: 7 }, (_, day) => {
+                        const cell = cells[week * 7 + day];
+                        return (React.createElement("div", { key: day, title: cell ? `${cell.key}: ${cell.count} questions` : "", style: { width: 10, height: 10, borderRadius: 2, background: cell ? heatColor(cell.count, cell.isFuture) : "#e8dcc8" } }));
+                    }))))),
+                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, marginTop: 6, justifyContent: "flex-end" } },
+                    React.createElement("span", { style: { fontSize: "0.55rem", color: "#bbb" } }, "less"),
+                    ["#e8dcc8", "#c8e6c9", "#81c784", "#388e3c", "#1b5e20"].map(c => (React.createElement("div", { key: c, style: { width: 9, height: 9, borderRadius: 2, background: c } }))),
+                    React.createElement("span", { style: { fontSize: "0.55rem", color: "#bbb" } }, "more"))),
+            React.createElement("div", { style: { marginBottom: 20 } },
+                React.createElement("div", { style: { fontSize: "0.65rem", color: "#aaa", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 } }, "By Library"),
+                React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, libRows.map(row => {
+                    const acc = row.total > 0 ? Math.round((row.correct / row.total) * 100) : 0;
+                    const accColor = acc >= 80 ? "#27ae60" : acc >= 60 ? "#b8860b" : "#c0392b";
+                    return (React.createElement("div", { key: row.label, style: { background: "#faf6ee", border: "1px solid #e8dcc8", borderRadius: 6, padding: "9px 12px" } },
+                        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 } },
+                            React.createElement("span", { style: { fontSize: "0.8rem", fontWeight: 600, color: "#1a1008" } }, row.label),
+                            React.createElement("span", { style: { fontSize: "0.7rem", color: accColor, fontWeight: 700 } },
+                                acc,
+                                "%")),
+                        React.createElement("div", { style: { height: 4, background: "#e8dcc8", borderRadius: 3, marginBottom: 5 } },
+                            React.createElement("div", { style: { height: "100%", borderRadius: 3, background: accColor, width: `${acc}%`, transition: "width 0.4s" } })),
+                        React.createElement("div", { style: { display: "flex", gap: 12, fontSize: "0.62rem", color: "#aaa" } },
+                            React.createElement("span", null,
+                                React.createElement("b", { style: { color: "#1a1008" } }, row.sessions),
+                                " session",
+                                row.sessions !== 1 ? "s" : ""),
+                            React.createElement("span", null,
+                                React.createElement("b", { style: { color: "#1a1008" } }, row.correct),
+                                "/",
+                                row.total,
+                                " correct"),
+                            React.createElement("span", null,
+                                "best ",
+                                React.createElement("b", { style: { color: accColor } },
+                                    row.bestPct,
+                                    "%")))));
+                }))),
+            React.createElement("div", { style: { borderTop: "1px solid #e8dcc8", paddingTop: 14 } }, !confirmReset ? (React.createElement("button", { onClick: () => setConfirmReset(true), style: { background: "none", border: "1px solid #ddd", borderRadius: 4, padding: "7px 16px",
+                    fontSize: "0.68rem", color: "#bbb", cursor: "pointer", fontFamily: "monospace", width: "100%" } }, "Reset all stats")) : (React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+                React.createElement("span", { style: { fontSize: "0.72rem", color: "#c0392b", flex: 1 } }, "Delete all session history?"),
+                React.createElement("button", { onClick: () => setConfirmReset(false), style: { padding: "6px 14px", borderRadius: 4, border: "1px solid #ddd", background: "#faf6ee",
+                        fontSize: "0.68rem", cursor: "pointer", fontFamily: "monospace" } }, "Cancel"),
+                React.createElement("button", { onClick: () => { onReset(); onClose(); }, style: { padding: "6px 14px", borderRadius: 4, border: "none", background: "#c0392b",
+                        color: "white", fontSize: "0.68rem", cursor: "pointer", fontFamily: "monospace" } }, "Delete")))))));
+}
+const overlayStyle = {
+    position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000,
+    display: "flex", alignItems: "flex-end", justifyContent: "center",
+};
+const modalStyle = {
+    background: "white", borderRadius: "12px 12px 0 0", width: "100%", maxWidth: 480,
+    padding: "20px 16px 32px", boxShadow: "0 -4px 32px rgba(0,0,0,0.18)",
+};
+const modalHeaderStyle = {
+    display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18,
+};
+const closeBtnStyle = {
+    background: "none", border: "none", fontSize: "1.1rem", cursor: "pointer", color: "#aaa", padding: "2px 6px",
+};
 function App() {
     var _a, _b;
     // ── persistent state (loaded from localStorage) ──
@@ -73,6 +215,9 @@ function App() {
     const [reviewKanji, setReviewKanji] = useState(() => new Set(LS.get("kanji_review", [])));
     const [studied, setStudied] = useState(() => LS.get("kanji_studied", {}));
     const [scores, setScores] = useState(() => LS.get("kanji_scores", {}));
+    const [sessions, setSessions] = useState(() => LS.get("kanji_sessions", []));
+    const sessionStart = useRef(null);
+    const [showStats, setShowStats] = useState(false);
     // ── session state ──
     const [libId, setLibId] = useState(BUILTIN_LIBRARIES[0].id);
     const [mode, setMode] = useState("flash");
@@ -159,6 +304,29 @@ function App() {
     useEffect(() => { LS.set("kanji_review", [...reviewKanji]); }, [reviewKanji]);
     useEffect(() => { LS.set("kanji_studied", studied); }, [studied]);
     useEffect(() => { LS.set("kanji_scores", scores); }, [scores]);
+    useEffect(() => { LS.set("kanji_sessions", sessions); }, [sessions]);
+    // Record a session entry whenever a quiz finishes
+    useEffect(() => {
+        if (!quizDone || quizCards.length === 0)
+            return;
+        const durationSec = sessionStart.current
+            ? Math.round((Date.now() - sessionStart.current) / 1000)
+            : null;
+        const entry = {
+            date: new Date().toISOString(),
+            library: libId,
+            libraryLabel: lib.label,
+            quizType,
+            score: quizScore,
+            total: quizCards.length,
+            points: totalQuizPoints,
+            maxPoints: maxQuizPoints,
+            timed: quizTimerEnabled,
+            durationSec,
+        };
+        setSessions(prev => [...prev, entry]);
+        sessionStart.current = null;
+    }, [quizDone]);
     useEffect(() => { setIdx(0); setLayer(0); setRevealed(false); }, [libId]);
     useEffect(() => { setLayer(0); setRevealed(false); }, [idx]);
     useEffect(() => { if (mode === "write")
@@ -348,6 +516,7 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
         setQuizAnswered(null);
         setQuizDone(false);
         setQuizSetup(false);
+        sessionStart.current = Date.now();
         buildOpts(sh, 0);
         if (quizTimerEnabled) {
             resetTimer(QUIZ_TIMER_SECONDS);
@@ -883,9 +1052,15 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
                                     quizCards.length * 5,
                                     speedMedal && React.createElement("span", { style: { fontSize: "1.4rem", marginLeft: 6 } }, speedMedal.kanji)),
                                 !speedMedal && React.createElement("div", { style: { fontSize: "0.7rem", color: "#bbb", marginTop: 2 } }, "\u3082\u3063\u3068\u7DF4\u7FD2\uFF01"))))),
-                    React.createElement("div", { style: { display: "flex", gap: 10, justifyContent: "center" } },
+                    React.createElement("div", { style: { display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" } },
                         React.createElement("button", { style: S.ghost, onClick: () => setQuizSetup(true) }, "Change Settings"),
-                        React.createElement("button", { style: S.btn, onClick: startQuiz }, "Try Again"))));
+                        React.createElement("button", { style: S.btn, onClick: startQuiz }, "Try Again"),
+                        sessions.length > 0 && (React.createElement("button", { style: Object.assign(Object.assign({}, S.ghost), { width: "100%", marginTop: 4 }), onClick: () => setShowStats(true) },
+                            "\uD83D\uDCCA Stats (",
+                            sessions.length,
+                            " session",
+                            sessions.length !== 1 ? "s" : "",
+                            ")")))));
             })())),
         mode === "write" && card && (React.createElement(React.Fragment, null,
             React.createElement("div", { style: { textAlign: "center", marginBottom: 8 } },
@@ -1007,7 +1182,8 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
                 boxShadow: "0 2px 8px rgba(0,0,0,0.15)", flexDirection: "column", gap: 0 } }, bigFont ? React.createElement(React.Fragment, null,
             "\uD83D\uDD0D",
             React.createElement("span", { style: { fontSize: "0.45rem", letterSpacing: "0em", marginTop: 1 } }, "shrink")) : "🔍"),
-        toast && (React.createElement("div", { style: { position: "fixed", top: 14, left: "50%", transform: "translateX(-50%)", background: toast.type === "good" ? "#27ae60" : "#c0392b", color: "white", padding: "8px 18px", borderRadius: 4, fontSize: "0.78rem", zIndex: 999, whiteSpace: "nowrap" } }, toast.msg))));
+        toast && (React.createElement("div", { style: { position: "fixed", top: 14, left: "50%", transform: "translateX(-50%)", background: toast.type === "good" ? "#27ae60" : "#c0392b", color: "white", padding: "8px 18px", borderRadius: 4, fontSize: "0.78rem", zIndex: 999, whiteSpace: "nowrap" } }, toast.msg)),
+        showStats && (React.createElement(StatsModal, { sessions: sessions, onClose: () => setShowStats(false), onReset: () => setSessions([]) }))));
 }
 const REVIEW_LIB_ID = "__review__";
 const regionColors = {
