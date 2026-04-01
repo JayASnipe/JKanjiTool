@@ -81,14 +81,14 @@ function getMedalForSession(s) {
         return { kanji: "銅", color: "#a04000", rank: 4 };
     return null;
 }
-function StatsModal({ sessions, onClose, onReset }) {
+function StatsModal({ sessions, initialTab, onClose, onReset }) {
     var _a;
     const QUIZ_TABS = [
         { key: "kanji", label: "漢字", sub: "Kanji → Reading" },
         { key: "compounds", label: "熟語", sub: "Compound → Reading" },
         { key: "compounds_reverse", label: "英語", sub: "English → Compound" },
     ];
-    const [tab, setTab] = useState("kanji");
+    const [tab, setTab] = useState(initialTab || "kanji");
     const [confirmReset, setConfirmReset] = useState(false);
     if (sessions.length === 0) {
         return (React.createElement("div", { style: overlayStyle, onClick: onClose },
@@ -149,13 +149,13 @@ function StatsModal({ sessions, onClose, onReset }) {
                     display: "flex", flexDirection: "column", alignItems: "center", gap: 2 } },
                 React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.1rem" } }, label),
                 React.createElement("span", { style: { fontSize: "0.52rem", letterSpacing: "0.04em", opacity: 0.7 } }, sub))))),
-            anyMedals && (React.createElement("div", { style: { display: "flex", gap: 6, justifyContent: "center", marginBottom: 16 } }, medalDefs.map(({ rank, kanji, color }) => medalCounts[rank] > 0 && (React.createElement("div", { key: rank, style: { display: "flex", flexDirection: "column", alignItems: "center",
+            tab !== "highscores" && anyMedals && (React.createElement("div", { style: { display: "flex", gap: 6, justifyContent: "center", marginBottom: 16 } }, medalDefs.map(({ rank, kanji, color }) => medalCounts[rank] > 0 && (React.createElement("div", { key: rank, style: { display: "flex", flexDirection: "column", alignItems: "center",
                     background: "#faf6ee", border: `1px solid ${color}44`, borderRadius: 6, padding: "7px 12px", minWidth: 52 } },
                 React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.3rem", color, fontWeight: 700 } }, kanji),
                 React.createElement("span", { style: { fontSize: "0.6rem", color: "#aaa", marginTop: 2 } },
                     "\u00D7",
                     medalCounts[rank])))))),
-            rows.length === 0 ? (React.createElement("div", { style: { textAlign: "center", padding: "32px 0", color: "#aaa", fontSize: "0.82rem" } },
+            tab !== "highscores" && (rows.length === 0 ? (React.createElement("div", { style: { textAlign: "center", padding: "32px 0", color: "#aaa", fontSize: "0.82rem" } },
                 "No ", (_a = QUIZ_TABS.find(t => t.key === tab)) === null || _a === void 0 ? void 0 :
                 _a.label,
                 " sessions yet.")) : (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 } }, rows.map(row => {
@@ -193,7 +193,103 @@ function StatsModal({ sessions, onClose, onReset }) {
                                 "/",
                                 row.bestMaxPoints,
                                 " pts"))))));
-            }))),
+            })))),
+            tab === "highscores" && (() => {
+                const hsMap = {};
+                sessions.filter(s => s.timed).forEach(s => {
+                    const key = s.library + '|' + s.quizType;
+                    if (!hsMap[key] || s.points > hsMap[key].points) {
+                        hsMap[key] = Object.assign({}, s);
+                    }
+                });
+                const hsRows = Object.values(hsMap).sort((a, b) => {
+                    const rA = a.maxPoints > 0 ? a.points / a.maxPoints : 0;
+                    const rB = b.maxPoints > 0 ? b.points / b.maxPoints : 0;
+                    return rB - rA || b.points - a.points;
+                });
+                const qLabel = { kanji: "漢字", compounds: "熟語", compounds_reverse: "英語" };
+                if (hsRows.length === 0)
+                    return (React.createElement("div", { style: { textAlign: "center", padding: "32px 0", color: "#aaa", fontSize: "0.82rem" } }, "No timed sessions yet \u2014 enable Timed Mode to earn speed scores!"));
+                return (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 } }, hsRows.map((s, i) => {
+                    const medal = getMedalForSession(s);
+                    const pct = s.maxPoints > 0 ? Math.round((s.points / s.maxPoints) * 100) : 0;
+                    const barColor = medal ? medal.color : "#aaa";
+                    const date = new Date(s.date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                    return (React.createElement("div", { key: s.library + s.quizType, style: { background: "#faf6ee", border: `1px solid ${medal ? medal.color + "55" : "#e8dcc8"}`, borderRadius: 8, padding: "10px 12px" } },
+                        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 } },
+                            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+                                React.createElement("span", { style: { fontSize: "1.1rem", color: "#aaa", fontWeight: 700, minWidth: 18 } },
+                                    "#",
+                                    i + 1),
+                                React.createElement("div", null,
+                                    React.createElement("div", { style: { fontSize: "0.82rem", fontWeight: 700, color: "#1a1008" } }, s.libraryLabel),
+                                    React.createElement("div", { style: { fontSize: "0.6rem", color: "#aaa", marginTop: 1 } },
+                                        qLabel[s.quizType],
+                                        " \u00B7 ",
+                                        s.total,
+                                        "q \u00B7 ",
+                                        date))),
+                            medal && React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.4rem", color: medal.color, fontWeight: 700 } }, medal.kanji)),
+                        React.createElement("div", { style: { height: 5, background: "#e8dcc8", borderRadius: 3, marginBottom: 5 } },
+                            React.createElement("div", { style: { height: "100%", borderRadius: 3, background: barColor, width: `${pct}%`, transition: "width 0.4s" } })),
+                        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "#aaa" } },
+                            React.createElement("span", null,
+                                "\u26A1 ",
+                                React.createElement("b", { style: { color: medal ? medal.color : "#1a1008", fontSize: "0.78rem" } }, s.points),
+                                "/",
+                                s.maxPoints,
+                                " pts"),
+                            React.createElement("span", null,
+                                React.createElement("b", { style: { color: "#27ae60" } }, s.score),
+                                "/",
+                                s.total,
+                                " correct"))));
+                })));
+            })(),
+            (() => {
+                const hsMap = {};
+                sessions.filter(s => s.timed && s.quizType === tab).forEach(s => {
+                    if (!hsMap[s.library] || s.points > hsMap[s.library].points) {
+                        hsMap[s.library] = Object.assign({}, s);
+                    }
+                });
+                const hsRows = Object.values(hsMap).sort((a, b) => {
+                    const rA = a.maxPoints > 0 ? a.points / a.maxPoints : 0;
+                    const rB = b.maxPoints > 0 ? b.points / b.maxPoints : 0;
+                    return rB - rA || b.points - a.points;
+                });
+                if (hsRows.length === 0)
+                    return null;
+                return (React.createElement("div", { style: { marginBottom: 20 } },
+                    React.createElement("div", { style: { fontSize: "0.65rem", color: "#aaa", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 } }, "\u26A1 High Scores"),
+                    React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, hsRows.map((s, i) => {
+                        const medal = getMedalForSession(s);
+                        const pct = s.maxPoints > 0 ? Math.round((s.points / s.maxPoints) * 100) : 0;
+                        const barColor = medal ? medal.color : "#aaa";
+                        const date = new Date(s.date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                        return (React.createElement("div", { key: s.library + i, style: { background: "#faf6ee", border: `1px solid ${medal ? medal.color + "55" : "#e8dcc8"}`, borderRadius: 6, padding: "9px 12px" } },
+                            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 } },
+                                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+                                    React.createElement("span", { style: { fontSize: "0.78rem", color: "#bbb", fontWeight: 700, minWidth: 18 } },
+                                        "#",
+                                        i + 1),
+                                    React.createElement("div", null,
+                                        React.createElement("div", { style: { fontSize: "0.78rem", fontWeight: 600, color: "#1a1008" } }, s.libraryLabel),
+                                        React.createElement("div", { style: { fontSize: "0.58rem", color: "#aaa", marginTop: 1 } },
+                                            s.total,
+                                            "q \u00B7 ",
+                                            date))),
+                                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+                                    medal && React.createElement("span", { style: { fontFamily: "serif", fontSize: "1rem", color: medal.color, fontWeight: 700 } }, medal.kanji),
+                                    React.createElement("span", { style: { fontSize: "0.78rem", color: medal ? medal.color : "#b8860b", fontWeight: 700 } },
+                                        s.points,
+                                        "/",
+                                        s.maxPoints,
+                                        " pts"))),
+                            React.createElement("div", { style: { height: 4, background: "#e8dcc8", borderRadius: 3 } },
+                                React.createElement("div", { style: { height: "100%", borderRadius: 3, background: barColor, width: `${pct}%`, transition: "width 0.4s" } }))));
+                    }))));
+            })(),
             React.createElement("div", { style: { borderTop: "1px solid #e8dcc8", paddingTop: 14 } }, !confirmReset ? (React.createElement("button", { onClick: () => setConfirmReset(true), style: { background: "none", border: "1px solid #ddd", borderRadius: 4, padding: "7px 16px",
                     fontSize: "0.68rem", color: "#bbb", cursor: "pointer", fontFamily: "monospace", width: "100%" } }, "Reset all stats")) : (React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
                 React.createElement("span", { style: { fontSize: "0.72rem", color: "#c0392b", flex: 1 } }, "Delete all session history?"),
@@ -1197,7 +1293,7 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
             "\uD83D\uDD0D",
             React.createElement("span", { style: { fontSize: "0.45rem", letterSpacing: "0em", marginTop: 1 } }, "shrink")) : "🔍"),
         toast && (React.createElement("div", { style: { position: "fixed", top: 14, left: "50%", transform: "translateX(-50%)", background: toast.type === "good" ? "#27ae60" : "#c0392b", color: "white", padding: "8px 18px", borderRadius: 4, fontSize: "0.78rem", zIndex: 999, whiteSpace: "nowrap" } }, toast.msg)),
-        showStats && (React.createElement(StatsModal, { sessions: sessions, onClose: () => setShowStats(false), onReset: () => setSessions([]) }))));
+        showStats && (React.createElement(StatsModal, { sessions: sessions, initialTab: quizType, onClose: () => setShowStats(false), onReset: () => setSessions([]) }))));
 }
 const REVIEW_LIB_ID = "__review__";
 const regionColors = {
