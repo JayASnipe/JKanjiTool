@@ -79,162 +79,277 @@ function RubyText({ text, id, pinnedWords, hoveredWord, isMobile, setHoveredWord
 }
 
 
-function StatsModal({ sessions, onClose, onReset }) {
+function getMedalForSession(s) {
+  if (!s.timed || s.total === 0) return null;
+  const q = s.total;
+  const b = s.points - s.score;
+  if (b >= q * 4.5) return { kanji:"白金", color:"#a0a0b8", rank:1 };
+  if (b >= q * 4)   return { kanji:"金",   color:"#c9960c", rank:2 };
+  if (b >= q * 3)   return { kanji:"銀",   color:"#7f8c8d", rank:3 };
+  if (b >= q * 2)   return { kanji:"銅",   color:"#a04000", rank:4 };
+  return null;
+}
+
+function StatsModal({ sessions, initialTab, onClose, onReset }) {
+  const QUIZ_TABS = [
+    { key:"kanji",             label:"漢字", sub:"Kanji → Reading" },
+    { key:"compounds",         label:"熟語", sub:"Compound → Reading" },
+    { key:"compounds_reverse", label:"英語", sub:"English → Compound" },
+  ];
+  const [tab, setTab] = useState(initialTab || "kanji");
   const [confirmReset, setConfirmReset] = useState(false);
+  const [groupFilter, setGroupFilter] = useState("all");
 
-  if (sessions.length === 0) {
-    return (
-      <div style={overlayStyle} onClick={onClose}>
-        <div style={modalStyle} onClick={e => e.stopPropagation()}>
-          <div style={modalHeaderStyle}>
-            <span style={{ fontFamily:"serif", fontSize:"1.1rem" }}>📊 Study Stats</span>
-            <button onClick={onClose} style={closeBtnStyle}>✕</button>
-          </div>
-          <div style={{ textAlign:"center", padding:"40px 0", color:"#aaa", fontSize:"0.85rem" }}>
-            No sessions yet — complete a quiz to start tracking!
-          </div>
-        </div>
-      </div>
-    );
+  const groups = ["all", ...Array.from(new Set(
+    sessions.map(s => s.libraryLabel.includes(" · ") ? s.libraryLabel.split(" · ")[0] : null).filter(Boolean)
+  )).sort()];
+
+  const filteredSessions = groupFilter === "all"
+    ? sessions
+    : sessions.filter(s => s.libraryLabel.startsWith(groupFilter + " · ") || s.libraryLabel === groupFilter);
+
+  // ── per-library breakdown for the active quiz type tab ──
+  function buildRows(quizType) {
+    const map = {};
+    filteredSessions.filter(s => s.quizType === quizType).forEach(s => {
+      if (!map[s.library]) map[s.library] = {
+        label: s.libraryLabel, sessions: 0, correct: 0, total: 0,
+        bestPct: 0, bestPoints: 0, bestMaxPoints: 0, bestMedal: null,
+      };
+      const e = map[s.library];
+      e.sessions++;
+      e.correct += s.score;
+      e.total   += s.total;
+      const pct = s.total > 0 ? Math.round((s.score / s.total) * 100) : 0;
+      if (pct > e.bestPct) e.bestPct = pct;
+      if (s.timed && s.points > e.bestPoints) {
+        e.bestPoints    = s.points;
+        e.bestMaxPoints = s.maxPoints;
+        e.bestMedal     = getMedalForSession(s);
+      }
+    });
+    return Object.values(map).sort((a, b) => b.sessions - a.sessions);
   }
 
-  // ── derived stats ──
-  const totalSessions = sessions.length;
-  const totalQuestions = sessions.reduce((s, e) => s + e.total, 0);
-  const totalCorrect = sessions.reduce((s, e) => s + e.score, 0);
-  const overallPct = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
+  const rows = buildRows(tab);
 
-  // ── heatmap: last 84 days (12 weeks) ──
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dayMs = 86400000;
-  // Build a map: dateStr -> question count
-  const dayMap = {};
-  sessions.forEach(s => {
-    const d = new Date(s.date);
-    d.setHours(0, 0, 0, 0);
-    const key = d.toISOString().slice(0, 10);
-    dayMap[key] = (dayMap[key] || 0) + s.total;
+  // ── medal totals for this tab ──
+  const medalCounts = { 1:0, 2:0, 3:0, 4:0 };
+  filteredSessions.filter(s => s.quizType === tab).forEach(s => {
+    const m = getMedalForSession(s);
+    if (m) medalCounts[m.rank]++;
   });
-  // Build 84-cell grid starting from the most recent Sunday going back 12 weeks
-  const startDay = new Date(today);
-  startDay.setDate(startDay.getDate() - startDay.getDay()); // rewind to Sunday
-  startDay.setDate(startDay.getDate() - 77); // go back 11 more weeks (12 total)
-  const cells = [];
-  for (let i = 0; i < 84; i++) {
-    const d = new Date(startDay.getTime() + i * dayMs);
-    const key = d.toISOString().slice(0, 10);
-    const count = dayMap[key] || 0;
-    const isFuture = d > today;
-    cells.push({ key, count, isFuture, dayOfWeek: d.getDay(), date: d });
-  }
-  const maxCount = Math.max(...cells.map(c => c.count), 1);
-  function heatColor(count, isFuture) {
-    if (isFuture || count === 0) return "#e8dcc8";
-    const intensity = count / maxCount;
-    if (intensity < 0.25) return "#c8e6c9";
-    if (intensity < 0.5)  return "#81c784";
-    if (intensity < 0.75) return "#388e3c";
-    return "#1b5e20";
-  }
-  const dayLabels = ["S","M","T","W","T","F","S"];
+  const anyMedals = Object.values(medalCounts).some(v => v > 0);
 
-  // ── per-library breakdown ──
-  const libMap = {};
-  sessions.forEach(s => {
-    if (!libMap[s.library]) libMap[s.library] = { label: s.libraryLabel, sessions: 0, correct: 0, total: 0, bestPct: 0 };
-    const entry = libMap[s.library];
-    entry.sessions++;
-    entry.correct += s.score;
-    entry.total += s.total;
-    const pct = s.total > 0 ? Math.round((s.score / s.total) * 100) : 0;
-    if (pct > entry.bestPct) entry.bestPct = pct;
-  });
-  const libRows = Object.values(libMap).sort((a, b) => b.sessions - a.sessions);
+  const medalDefs = [
+    { rank:1, kanji:"白金", color:"#a0a0b8" },
+    { rank:2, kanji:"金",   color:"#c9960c" },
+    { rank:3, kanji:"銀",   color:"#7f8c8d" },
+    { rank:4, kanji:"銅",   color:"#a04000" },
+  ];
 
   return (
     <div style={overlayStyle} onClick={onClose}>
-      <div style={{ ...modalStyle, maxHeight:"85vh", overflowY:"auto" }} onClick={e => e.stopPropagation()}>
+      <div style={modalStyle} onClick={e => e.stopPropagation()}>
+        <div style={{ padding:"20px 16px 0", flexShrink:0 }}>
 
         {/* Header */}
         <div style={modalHeaderStyle}>
-          <span style={{ fontFamily:"serif", fontSize:"1.1rem" }}>📊 Study Stats</span>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ fontFamily:"serif", fontSize:"1.1rem" }}>📊 Study Stats</span>
+            {groups.length > 2 && (
+              <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
+                style={{ fontSize:"0.68rem", fontFamily:"monospace", border:"1px solid #e8dcc8",
+                  borderRadius:4, padding:"3px 6px", background:"#faf6ee", color:"#1a1008",
+                  cursor:"pointer", maxWidth:130 }}>
+                {groups.map(g => (
+                  <option key={g} value={g}>{g === "all" ? "All Libraries" : g}</option>
+                ))}
+              </select>
+            )}
+          </div>
           <button onClick={onClose} style={closeBtnStyle}>✕</button>
         </div>
 
-        {/* Summary row */}
-        <div style={{ display:"flex", gap:8, marginBottom:20 }}>
-          {[
-            { label:"Sessions",  value: totalSessions },
-            { label:"Questions", value: totalQuestions },
-            { label:"Accuracy",  value: overallPct + "%" },
-          ].map(({ label, value }) => (
-            <div key={label} style={{ flex:1, background:"#faf6ee", border:"1px solid #e8dcc8", borderRadius:6, padding:"10px 6px", textAlign:"center" }}>
-              <div style={{ fontFamily:"serif", fontSize:"1.5rem", fontWeight:700, color:"#1a1008" }}>{value}</div>
-              <div style={{ fontSize:"0.6rem", color:"#aaa", letterSpacing:"0.1em", textTransform:"uppercase", marginTop:2 }}>{label}</div>
-            </div>
+        {/* Quiz type tabs */}
+        <div style={{ display:"flex", border:"1px solid #e8dcc8", borderRadius:6, overflow:"hidden", marginBottom:18 }}>
+          {QUIZ_TABS.map(({ key, label, sub }) => (
+            <button key={key} onClick={() => setTab(key)}
+              style={{ flex:1, padding:"8px 4px", border:"none",
+                background: tab===key ? "#1a1008" : "transparent",
+                color: tab===key ? "#f5efe3" : "#888",
+                cursor:"pointer", fontFamily:"monospace",
+                display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
+              <span style={{ fontFamily:"serif", fontSize:"1.1rem" }}>{label}</span>
+              <span style={{ fontSize:"0.52rem", letterSpacing:"0.04em", opacity:0.7 }}>{sub}</span>
+            </button>
           ))}
         </div>
+        </div>{/* end fixed header */}
+        <div style={{ overflowY:"auto", flex:1, padding:"0 16px 24px" }}>
 
-        {/* Heatmap */}
-        <div style={{ marginBottom:20 }}>
-          <div style={{ fontSize:"0.65rem", color:"#aaa", letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:8 }}>Activity — Last 12 Weeks</div>
-          <div style={{ display:"flex", gap:2 }}>
-            {/* Day labels column */}
-            <div style={{ display:"flex", flexDirection:"column", gap:2, marginRight:2 }}>
-              {dayLabels.map((d, i) => (
-                <div key={i} style={{ width:10, height:10, fontSize:"0.45rem", color:"#bbb", display:"flex", alignItems:"center", justifyContent:"center" }}>{i % 2 === 1 ? d : ""}</div>
-              ))}
-            </div>
-            {/* 12 columns (weeks) */}
-            {Array.from({ length: 12 }, (_, week) => (
-              <div key={week} style={{ display:"flex", flexDirection:"column", gap:2 }}>
-                {Array.from({ length: 7 }, (_, day) => {
-                  const cell = cells[week * 7 + day];
-                  return (
-                    <div key={day} title={cell ? `${cell.key}: ${cell.count} questions` : ""}
-                      style={{ width:10, height:10, borderRadius:2, background: cell ? heatColor(cell.count, cell.isFuture) : "#e8dcc8" }} />
-                  );
-                })}
+        {filteredSessions.length === 0 && (
+          <div style={{ textAlign:"center", padding:"40px 0", color:"#aaa", fontSize:"0.85rem" }}>
+            {groupFilter === "all" ? "No sessions yet — complete a quiz to start tracking!" : `No sessions for ${groupFilter} yet.`}
+          </div>
+        )}
+
+        {/* Medal row — only for quiz type tabs */}
+        {tab !== "highscores" && anyMedals && (
+          <div style={{ display:"flex", gap:6, justifyContent:"center", marginBottom:16 }}>
+            {medalDefs.map(({ rank, kanji, color }) => medalCounts[rank] > 0 && (
+              <div key={rank} style={{ display:"flex", flexDirection:"column", alignItems:"center",
+                background:"#faf6ee", border:`1px solid ${color}44`, borderRadius:6, padding:"7px 12px", minWidth:52 }}>
+                <span style={{ fontFamily:"serif", fontSize:"1.3rem", color, fontWeight:700 }}>{kanji}</span>
+                <span style={{ fontSize:"0.6rem", color:"#aaa", marginTop:2 }}>×{medalCounts[rank]}</span>
               </div>
             ))}
           </div>
-          <div style={{ display:"flex", alignItems:"center", gap:4, marginTop:6, justifyContent:"flex-end" }}>
-            <span style={{ fontSize:"0.55rem", color:"#bbb" }}>less</span>
-            {["#e8dcc8","#c8e6c9","#81c784","#388e3c","#1b5e20"].map(c => (
-              <div key={c} style={{ width:9, height:9, borderRadius:2, background:c }} />
-            ))}
-            <span style={{ fontSize:"0.55rem", color:"#bbb" }}>more</span>
-          </div>
-        </div>
+        )}
 
-        {/* Per-library breakdown */}
-        <div style={{ marginBottom:20 }}>
-          <div style={{ fontSize:"0.65rem", color:"#aaa", letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:8 }}>By Library</div>
-          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-            {libRows.map(row => {
+        {/* Library rows — only for quiz type tabs */}
+        {tab !== "highscores" && (rows.length === 0 ? (
+          <div style={{ textAlign:"center", padding:"32px 0", color:"#aaa", fontSize:"0.82rem" }}>
+            No {QUIZ_TABS.find(t => t.key === tab)?.label} sessions yet.
+          </div>
+        ) : (
+          <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:20 }}>
+            {rows.map(row => {
               const acc = row.total > 0 ? Math.round((row.correct / row.total) * 100) : 0;
               const accColor = acc >= 80 ? "#27ae60" : acc >= 60 ? "#b8860b" : "#c0392b";
               return (
                 <div key={row.label} style={{ background:"#faf6ee", border:"1px solid #e8dcc8", borderRadius:6, padding:"9px 12px" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
                     <span style={{ fontSize:"0.8rem", fontWeight:600, color:"#1a1008" }}>{row.label}</span>
-                    <span style={{ fontSize:"0.7rem", color:accColor, fontWeight:700 }}>{acc}%</span>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      {row.bestMedal && (
+                        <span style={{ fontFamily:"serif", fontSize:"1rem", color:row.bestMedal.color, fontWeight:700 }}>{row.bestMedal.kanji}</span>
+                      )}
+                      <span style={{ fontSize:"0.7rem", color:accColor, fontWeight:700 }}>{acc}%</span>
+                    </div>
                   </div>
                   {/* Accuracy bar */}
-                  <div style={{ height:4, background:"#e8dcc8", borderRadius:3, marginBottom:5 }}>
+                  <div style={{ height:4, background:"#e8dcc8", borderRadius:3, marginBottom:6 }}>
                     <div style={{ height:"100%", borderRadius:3, background:accColor, width:`${acc}%`, transition:"width 0.4s" }} />
                   </div>
-                  <div style={{ display:"flex", gap:12, fontSize:"0.62rem", color:"#aaa" }}>
+                  <div style={{ display:"flex", gap:10, fontSize:"0.62rem", color:"#aaa", flexWrap:"wrap" }}>
                     <span><b style={{ color:"#1a1008" }}>{row.sessions}</b> session{row.sessions !== 1 ? "s" : ""}</span>
                     <span><b style={{ color:"#1a1008" }}>{row.correct}</b>/{row.total} correct</span>
                     <span>best <b style={{ color:accColor }}>{row.bestPct}%</b></span>
+                    {row.bestPoints > 0 && (
+                      <span>⚡ <b style={{ color: row.bestMedal ? row.bestMedal.color : "#b8860b" }}>{row.bestPoints}/{row.bestMaxPoints} pts</b></span>
+                    )}
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
+        ))}
+
+
+        {/* High Scores tab */}
+        {tab === "highscores" && (() => {
+          const hsMap = {};
+          filteredSessions.filter(s => s.timed).forEach(s => {
+            const key = s.library + '|' + s.quizType;
+            if (!hsMap[key] || s.points > hsMap[key].points) {
+              hsMap[key] = { ...s };
+            }
+          });
+          const hsRows = Object.values(hsMap).sort((a, b) => {
+            const rA = a.maxPoints > 0 ? a.points / a.maxPoints : 0;
+            const rB = b.maxPoints > 0 ? b.points / b.maxPoints : 0;
+            return rB - rA || b.points - a.points;
+          });
+          const qLabel = { kanji:"漢字", compounds:"熟語", compounds_reverse:"英語" };
+          if (hsRows.length === 0) return (
+            <div style={{ textAlign:"center", padding:"32px 0", color:"#aaa", fontSize:"0.82rem" }}>
+              No timed sessions yet — enable Timed Mode to earn speed scores!
+            </div>
+          );
+          return (
+            <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:20 }}>
+              {hsRows.map((s, i) => {
+                const medal = getMedalForSession(s);
+                const pct = s.maxPoints > 0 ? Math.round((s.points / s.maxPoints) * 100) : 0;
+                const barColor = medal ? medal.color : "#aaa";
+                const date = new Date(s.date).toLocaleDateString(undefined, { month:"short", day:"numeric" });
+                return (
+                  <div key={s.library + s.quizType} style={{ background:"#faf6ee", border:`1px solid ${medal ? medal.color + "55" : "#e8dcc8"}`, borderRadius:8, padding:"10px 12px" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <span style={{ fontSize:"1.1rem", color:"#aaa", fontWeight:700, minWidth:18 }}>#{i+1}</span>
+                        <div>
+                          <div style={{ fontSize:"0.82rem", fontWeight:700, color:"#1a1008" }}>{s.libraryLabel}</div>
+                          <div style={{ fontSize:"0.6rem", color:"#aaa", marginTop:1 }}>{qLabel[s.quizType]} · {s.total}q · {date}</div>
+                        </div>
+                      </div>
+                      {medal && <span style={{ fontFamily:"serif", fontSize:"1.4rem", color:medal.color, fontWeight:700 }}>{medal.kanji}</span>}
+                    </div>
+                    <div style={{ height:5, background:"#e8dcc8", borderRadius:3, marginBottom:5 }}>
+                      <div style={{ height:"100%", borderRadius:3, background:barColor, width:`${pct}%`, transition:"width 0.4s" }} />
+                    </div>
+                    <div style={{ display:"flex", justifyContent:"space-between", fontSize:"0.65rem", color:"#aaa" }}>
+                      <span>⚡ <b style={{ color: medal ? medal.color : "#1a1008", fontSize:"0.78rem" }}>{s.points}</b>/{s.maxPoints} pts</span>
+                      <span><b style={{ color:"#27ae60" }}>{s.score}</b>/{s.total} correct</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
+        {/* High Scores for this quiz type */}
+        {(() => {
+          const hsMap = {};
+          filteredSessions.filter(s => s.timed && s.quizType === tab).forEach(s => {
+            if (!hsMap[s.library] || s.points > hsMap[s.library].points) {
+              hsMap[s.library] = { ...s };
+            }
+          });
+          const hsRows = Object.values(hsMap).sort((a, b) => {
+            const rA = a.maxPoints > 0 ? a.points / a.maxPoints : 0;
+            const rB = b.maxPoints > 0 ? b.points / b.maxPoints : 0;
+            return rB - rA || b.points - a.points;
+          });
+          if (hsRows.length === 0) return null;
+          return (
+            <div style={{ marginBottom:20 }}>
+              <div style={{ fontSize:"0.65rem", color:"#aaa", letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:8 }}>⚡ High Scores</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                {hsRows.map((s, i) => {
+                  const medal = getMedalForSession(s);
+                  const pct = s.maxPoints > 0 ? Math.round((s.points / s.maxPoints) * 100) : 0;
+                  const barColor = medal ? medal.color : "#aaa";
+                  const date = new Date(s.date).toLocaleDateString(undefined, { month:"short", day:"numeric" });
+                  return (
+                    <div key={s.library + i} style={{ background:"#faf6ee", border:`1px solid ${medal ? medal.color + "55" : "#e8dcc8"}`, borderRadius:6, padding:"9px 12px" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                          <span style={{ fontSize:"0.78rem", color:"#bbb", fontWeight:700, minWidth:18 }}>#{i+1}</span>
+                          <div>
+                            <div style={{ fontSize:"0.78rem", fontWeight:600, color:"#1a1008" }}>{s.libraryLabel}</div>
+                            <div style={{ fontSize:"0.58rem", color:"#aaa", marginTop:1 }}>{s.total}q · {date}</div>
+                          </div>
+                        </div>
+                        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                          {medal && <span style={{ fontFamily:"serif", fontSize:"1rem", color:medal.color, fontWeight:700 }}>{medal.kanji}</span>}
+                          <span style={{ fontSize:"0.78rem", color: medal ? medal.color : "#b8860b", fontWeight:700 }}>
+                            {s.points}/{s.maxPoints} pts
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ height:4, background:"#e8dcc8", borderRadius:3 }}>
+                        <div style={{ height:"100%", borderRadius:3, background:barColor, width:`${pct}%`, transition:"width 0.4s" }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Reset */}
         <div style={{ borderTop:"1px solid #e8dcc8", paddingTop:14 }}>
@@ -261,6 +376,7 @@ function StatsModal({ sessions, onClose, onReset }) {
           )}
         </div>
 
+        </div>{/* end scroll body */}
       </div>
     </div>
   );
@@ -268,11 +384,13 @@ function StatsModal({ sessions, onClose, onReset }) {
 
 const overlayStyle = {
   position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:1000,
-  display:"flex", alignItems:"flex-end", justifyContent:"center",
+  display:"flex", alignItems:"flex-start", justifyContent:"center",
+  paddingTop:75,
 };
 const modalStyle = {
-  background:"white", borderRadius:"12px 12px 0 0", width:"100%", maxWidth:480,
-  padding:"20px 16px 32px", boxShadow:"0 -4px 32px rgba(0,0,0,0.18)",
+  background:"white", borderRadius:"12px", width:"calc(100% - 32px)", maxWidth:480,
+  maxHeight:"calc(100vh - 95px)", display:"flex", flexDirection:"column",
+  boxShadow:"0 8px 40px rgba(0,0,0,0.22)",
 };
 const modalHeaderStyle = {
   display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18,
@@ -393,7 +511,7 @@ function App() {
     const entry = {
       date: new Date().toISOString(),
       library: libId,
-      libraryLabel: lib.label,
+      libraryLabel: (() => { const g = GROUPS.find(g => g.id === lib.group); return g ? g.label + ' · ' + lib.label : lib.label; })(),
       quizType,
       score: quizScore,
       total: quizCards.length,
@@ -1162,6 +1280,11 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
             )}
 
             <button style={{ ...S.btn, width:"100%", padding:"11px" }} onClick={startQuiz}>Start Quiz →</button>
+            {sessions.length > 0 && (
+              <button style={{ ...S.ghost, width:"100%", padding:"9px", marginTop:8 }} onClick={() => setShowStats(true)}>
+                📊 Stats ({sessions.length} session{sessions.length !== 1 ? "s" : ""})
+              </button>
+            )}
           </div>
         )}
 
@@ -1289,7 +1412,6 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
               <div style={{ fontSize:"4rem", fontFamily:"serif", color:"#c0392b", fontWeight:700, lineHeight:1 }}>
                 {quizScore}/{quizCards.length}
               </div>
-              <div style={{ fontSize:"1rem", letterSpacing:"0.2em", textTransform:"uppercase", color:"#aaa", marginTop:5, fontFamily:"monospace" }}>Correct</div>
               <div style={{ fontSize:"1.4rem", color: accuracyColor, marginTop:8, fontFamily:"serif" }}>
                 {accuracyLabel}
               </div>
@@ -1636,6 +1758,7 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
       {showStats && (
         <StatsModal
           sessions={sessions}
+          initialTab={quizType}
           onClose={() => setShowStats(false)}
           onReset={() => setSessions([])}
         />

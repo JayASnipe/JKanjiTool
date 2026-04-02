@@ -90,18 +90,15 @@ function StatsModal({ sessions, initialTab, onClose, onReset }) {
     ];
     const [tab, setTab] = useState(initialTab || "kanji");
     const [confirmReset, setConfirmReset] = useState(false);
-    if (sessions.length === 0) {
-        return (React.createElement("div", { style: overlayStyle, onClick: onClose },
-            React.createElement("div", { style: modalStyle, onClick: e => e.stopPropagation() },
-                React.createElement("div", { style: modalHeaderStyle },
-                    React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.1rem" } }, "\uD83D\uDCCA Study Stats"),
-                    React.createElement("button", { onClick: onClose, style: closeBtnStyle }, "\u2715")),
-                React.createElement("div", { style: { textAlign: "center", padding: "40px 0", color: "#aaa", fontSize: "0.85rem" } }, "No sessions yet \u2014 complete a quiz to start tracking!"))));
-    }
+    const [groupFilter, setGroupFilter] = useState("all");
+    const groups = ["all", ...Array.from(new Set(sessions.map(s => s.libraryLabel.includes(" · ") ? s.libraryLabel.split(" · ")[0] : null).filter(Boolean))).sort()];
+    const filteredSessions = groupFilter === "all"
+        ? sessions
+        : sessions.filter(s => s.libraryLabel.startsWith(groupFilter + " · ") || s.libraryLabel === groupFilter);
     // ── per-library breakdown for the active quiz type tab ──
     function buildRows(quizType) {
         const map = {};
-        sessions.filter(s => s.quizType === quizType).forEach(s => {
+        filteredSessions.filter(s => s.quizType === quizType).forEach(s => {
             if (!map[s.library])
                 map[s.library] = {
                     label: s.libraryLabel, sessions: 0, correct: 0, total: 0,
@@ -125,7 +122,7 @@ function StatsModal({ sessions, initialTab, onClose, onReset }) {
     const rows = buildRows(tab);
     // ── medal totals for this tab ──
     const medalCounts = { 1: 0, 2: 0, 3: 0, 4: 0 };
-    sessions.filter(s => s.quizType === tab).forEach(s => {
+    filteredSessions.filter(s => s.quizType === tab).forEach(s => {
         const m = getMedalForSession(s);
         if (m)
             medalCounts[m.rank]++;
@@ -138,173 +135,182 @@ function StatsModal({ sessions, initialTab, onClose, onReset }) {
         { rank: 4, kanji: "銅", color: "#a04000" },
     ];
     return (React.createElement("div", { style: overlayStyle, onClick: onClose },
-        React.createElement("div", { style: Object.assign(Object.assign({}, modalStyle), { maxHeight: "85vh", overflowY: "auto" }), onClick: e => e.stopPropagation() },
-            React.createElement("div", { style: modalHeaderStyle },
-                React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.1rem" } }, "\uD83D\uDCCA Study Stats"),
-                React.createElement("button", { onClick: onClose, style: closeBtnStyle }, "\u2715")),
-            React.createElement("div", { style: { display: "flex", border: "1px solid #e8dcc8", borderRadius: 6, overflow: "hidden", marginBottom: 18 } }, QUIZ_TABS.map(({ key, label, sub }) => (React.createElement("button", { key: key, onClick: () => setTab(key), style: { flex: 1, padding: "8px 4px", border: "none",
-                    background: tab === key ? "#1a1008" : "transparent",
-                    color: tab === key ? "#f5efe3" : "#888",
-                    cursor: "pointer", fontFamily: "monospace",
-                    display: "flex", flexDirection: "column", alignItems: "center", gap: 2 } },
-                React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.1rem" } }, label),
-                React.createElement("span", { style: { fontSize: "0.52rem", letterSpacing: "0.04em", opacity: 0.7 } }, sub))))),
-            tab !== "highscores" && anyMedals && (React.createElement("div", { style: { display: "flex", gap: 6, justifyContent: "center", marginBottom: 16 } }, medalDefs.map(({ rank, kanji, color }) => medalCounts[rank] > 0 && (React.createElement("div", { key: rank, style: { display: "flex", flexDirection: "column", alignItems: "center",
-                    background: "#faf6ee", border: `1px solid ${color}44`, borderRadius: 6, padding: "7px 12px", minWidth: 52 } },
-                React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.3rem", color, fontWeight: 700 } }, kanji),
-                React.createElement("span", { style: { fontSize: "0.6rem", color: "#aaa", marginTop: 2 } },
-                    "\u00D7",
-                    medalCounts[rank])))))),
-            tab !== "highscores" && (rows.length === 0 ? (React.createElement("div", { style: { textAlign: "center", padding: "32px 0", color: "#aaa", fontSize: "0.82rem" } },
-                "No ", (_a = QUIZ_TABS.find(t => t.key === tab)) === null || _a === void 0 ? void 0 :
-                _a.label,
-                " sessions yet.")) : (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 } }, rows.map(row => {
-                const acc = row.total > 0 ? Math.round((row.correct / row.total) * 100) : 0;
-                const accColor = acc >= 80 ? "#27ae60" : acc >= 60 ? "#b8860b" : "#c0392b";
-                return (React.createElement("div", { key: row.label, style: { background: "#faf6ee", border: "1px solid #e8dcc8", borderRadius: 6, padding: "9px 12px" } },
-                    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 } },
-                        React.createElement("span", { style: { fontSize: "0.8rem", fontWeight: 600, color: "#1a1008" } }, row.label),
-                        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
-                            row.bestMedal && (React.createElement("span", { style: { fontFamily: "serif", fontSize: "1rem", color: row.bestMedal.color, fontWeight: 700 } }, row.bestMedal.kanji)),
-                            React.createElement("span", { style: { fontSize: "0.7rem", color: accColor, fontWeight: 700 } },
-                                acc,
-                                "%"))),
-                    React.createElement("div", { style: { height: 4, background: "#e8dcc8", borderRadius: 3, marginBottom: 6 } },
-                        React.createElement("div", { style: { height: "100%", borderRadius: 3, background: accColor, width: `${acc}%`, transition: "width 0.4s" } })),
-                    React.createElement("div", { style: { display: "flex", gap: 10, fontSize: "0.62rem", color: "#aaa", flexWrap: "wrap" } },
-                        React.createElement("span", null,
-                            React.createElement("b", { style: { color: "#1a1008" } }, row.sessions),
-                            " session",
-                            row.sessions !== 1 ? "s" : ""),
-                        React.createElement("span", null,
-                            React.createElement("b", { style: { color: "#1a1008" } }, row.correct),
-                            "/",
-                            row.total,
-                            " correct"),
-                        React.createElement("span", null,
-                            "best ",
-                            React.createElement("b", { style: { color: accColor } },
-                                row.bestPct,
-                                "%")),
-                        row.bestPoints > 0 && (React.createElement("span", null,
-                            "\u26A1 ",
-                            React.createElement("b", { style: { color: row.bestMedal ? row.bestMedal.color : "#b8860b" } },
-                                row.bestPoints,
-                                "/",
-                                row.bestMaxPoints,
-                                " pts"))))));
-            })))),
-            tab === "highscores" && (() => {
-                const hsMap = {};
-                sessions.filter(s => s.timed).forEach(s => {
-                    const key = s.library + '|' + s.quizType;
-                    if (!hsMap[key] || s.points > hsMap[key].points) {
-                        hsMap[key] = Object.assign({}, s);
-                    }
-                });
-                const hsRows = Object.values(hsMap).sort((a, b) => {
-                    const rA = a.maxPoints > 0 ? a.points / a.maxPoints : 0;
-                    const rB = b.maxPoints > 0 ? b.points / b.maxPoints : 0;
-                    return rB - rA || b.points - a.points;
-                });
-                const qLabel = { kanji: "漢字", compounds: "熟語", compounds_reverse: "英語" };
-                if (hsRows.length === 0)
-                    return (React.createElement("div", { style: { textAlign: "center", padding: "32px 0", color: "#aaa", fontSize: "0.82rem" } }, "No timed sessions yet \u2014 enable Timed Mode to earn speed scores!"));
-                return (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 } }, hsRows.map((s, i) => {
-                    const medal = getMedalForSession(s);
-                    const pct = s.maxPoints > 0 ? Math.round((s.points / s.maxPoints) * 100) : 0;
-                    const barColor = medal ? medal.color : "#aaa";
-                    const date = new Date(s.date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-                    return (React.createElement("div", { key: s.library + s.quizType, style: { background: "#faf6ee", border: `1px solid ${medal ? medal.color + "55" : "#e8dcc8"}`, borderRadius: 8, padding: "10px 12px" } },
-                        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 } },
-                            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
-                                React.createElement("span", { style: { fontSize: "1.1rem", color: "#aaa", fontWeight: 700, minWidth: 18 } },
-                                    "#",
-                                    i + 1),
-                                React.createElement("div", null,
-                                    React.createElement("div", { style: { fontSize: "0.82rem", fontWeight: 700, color: "#1a1008" } }, s.libraryLabel),
-                                    React.createElement("div", { style: { fontSize: "0.6rem", color: "#aaa", marginTop: 1 } },
-                                        qLabel[s.quizType],
-                                        " \u00B7 ",
-                                        s.total,
-                                        "q \u00B7 ",
-                                        date))),
-                            medal && React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.4rem", color: medal.color, fontWeight: 700 } }, medal.kanji)),
-                        React.createElement("div", { style: { height: 5, background: "#e8dcc8", borderRadius: 3, marginBottom: 5 } },
-                            React.createElement("div", { style: { height: "100%", borderRadius: 3, background: barColor, width: `${pct}%`, transition: "width 0.4s" } })),
-                        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "#aaa" } },
+        React.createElement("div", { style: modalStyle, onClick: e => e.stopPropagation() },
+            React.createElement("div", { style: { padding: "20px 16px 0", flexShrink: 0 } },
+                React.createElement("div", { style: modalHeaderStyle },
+                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+                        React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.1rem" } }, "\uD83D\uDCCA Study Stats"),
+                        groups.length > 2 && (React.createElement("select", { value: groupFilter, onChange: e => setGroupFilter(e.target.value), style: { fontSize: "0.68rem", fontFamily: "monospace", border: "1px solid #e8dcc8",
+                                borderRadius: 4, padding: "3px 6px", background: "#faf6ee", color: "#1a1008",
+                                cursor: "pointer", maxWidth: 130 } }, groups.map(g => (React.createElement("option", { key: g, value: g }, g === "all" ? "All Libraries" : g)))))),
+                    React.createElement("button", { onClick: onClose, style: closeBtnStyle }, "\u2715")),
+                React.createElement("div", { style: { display: "flex", border: "1px solid #e8dcc8", borderRadius: 6, overflow: "hidden", marginBottom: 18 } }, QUIZ_TABS.map(({ key, label, sub }) => (React.createElement("button", { key: key, onClick: () => setTab(key), style: { flex: 1, padding: "8px 4px", border: "none",
+                        background: tab === key ? "#1a1008" : "transparent",
+                        color: tab === key ? "#f5efe3" : "#888",
+                        cursor: "pointer", fontFamily: "monospace",
+                        display: "flex", flexDirection: "column", alignItems: "center", gap: 2 } },
+                    React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.1rem" } }, label),
+                    React.createElement("span", { style: { fontSize: "0.52rem", letterSpacing: "0.04em", opacity: 0.7 } }, sub)))))),
+            React.createElement("div", { style: { overflowY: "auto", flex: 1, padding: "0 16px 24px" } },
+                filteredSessions.length === 0 && (React.createElement("div", { style: { textAlign: "center", padding: "40px 0", color: "#aaa", fontSize: "0.85rem" } }, groupFilter === "all" ? "No sessions yet — complete a quiz to start tracking!" : `No sessions for ${groupFilter} yet.`)),
+                tab !== "highscores" && anyMedals && (React.createElement("div", { style: { display: "flex", gap: 6, justifyContent: "center", marginBottom: 16 } }, medalDefs.map(({ rank, kanji, color }) => medalCounts[rank] > 0 && (React.createElement("div", { key: rank, style: { display: "flex", flexDirection: "column", alignItems: "center",
+                        background: "#faf6ee", border: `1px solid ${color}44`, borderRadius: 6, padding: "7px 12px", minWidth: 52 } },
+                    React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.3rem", color, fontWeight: 700 } }, kanji),
+                    React.createElement("span", { style: { fontSize: "0.6rem", color: "#aaa", marginTop: 2 } },
+                        "\u00D7",
+                        medalCounts[rank])))))),
+                tab !== "highscores" && (rows.length === 0 ? (React.createElement("div", { style: { textAlign: "center", padding: "32px 0", color: "#aaa", fontSize: "0.82rem" } },
+                    "No ", (_a = QUIZ_TABS.find(t => t.key === tab)) === null || _a === void 0 ? void 0 :
+                    _a.label,
+                    " sessions yet.")) : (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 } }, rows.map(row => {
+                    const acc = row.total > 0 ? Math.round((row.correct / row.total) * 100) : 0;
+                    const accColor = acc >= 80 ? "#27ae60" : acc >= 60 ? "#b8860b" : "#c0392b";
+                    return (React.createElement("div", { key: row.label, style: { background: "#faf6ee", border: "1px solid #e8dcc8", borderRadius: 6, padding: "9px 12px" } },
+                        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 } },
+                            React.createElement("span", { style: { fontSize: "0.8rem", fontWeight: 600, color: "#1a1008" } }, row.label),
+                            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+                                row.bestMedal && (React.createElement("span", { style: { fontFamily: "serif", fontSize: "1rem", color: row.bestMedal.color, fontWeight: 700 } }, row.bestMedal.kanji)),
+                                React.createElement("span", { style: { fontSize: "0.7rem", color: accColor, fontWeight: 700 } },
+                                    acc,
+                                    "%"))),
+                        React.createElement("div", { style: { height: 4, background: "#e8dcc8", borderRadius: 3, marginBottom: 6 } },
+                            React.createElement("div", { style: { height: "100%", borderRadius: 3, background: accColor, width: `${acc}%`, transition: "width 0.4s" } })),
+                        React.createElement("div", { style: { display: "flex", gap: 10, fontSize: "0.62rem", color: "#aaa", flexWrap: "wrap" } },
                             React.createElement("span", null,
+                                React.createElement("b", { style: { color: "#1a1008" } }, row.sessions),
+                                " session",
+                                row.sessions !== 1 ? "s" : ""),
+                            React.createElement("span", null,
+                                React.createElement("b", { style: { color: "#1a1008" } }, row.correct),
+                                "/",
+                                row.total,
+                                " correct"),
+                            React.createElement("span", null,
+                                "best ",
+                                React.createElement("b", { style: { color: accColor } },
+                                    row.bestPct,
+                                    "%")),
+                            row.bestPoints > 0 && (React.createElement("span", null,
                                 "\u26A1 ",
-                                React.createElement("b", { style: { color: medal ? medal.color : "#1a1008", fontSize: "0.78rem" } }, s.points),
-                                "/",
-                                s.maxPoints,
-                                " pts"),
-                            React.createElement("span", null,
-                                React.createElement("b", { style: { color: "#27ae60" } }, s.score),
-                                "/",
-                                s.total,
-                                " correct"))));
-                })));
-            })(),
-            (() => {
-                const hsMap = {};
-                sessions.filter(s => s.timed && s.quizType === tab).forEach(s => {
-                    if (!hsMap[s.library] || s.points > hsMap[s.library].points) {
-                        hsMap[s.library] = Object.assign({}, s);
-                    }
-                });
-                const hsRows = Object.values(hsMap).sort((a, b) => {
-                    const rA = a.maxPoints > 0 ? a.points / a.maxPoints : 0;
-                    const rB = b.maxPoints > 0 ? b.points / b.maxPoints : 0;
-                    return rB - rA || b.points - a.points;
-                });
-                if (hsRows.length === 0)
-                    return null;
-                return (React.createElement("div", { style: { marginBottom: 20 } },
-                    React.createElement("div", { style: { fontSize: "0.65rem", color: "#aaa", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 } }, "\u26A1 High Scores"),
-                    React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, hsRows.map((s, i) => {
+                                React.createElement("b", { style: { color: row.bestMedal ? row.bestMedal.color : "#b8860b" } },
+                                    row.bestPoints,
+                                    "/",
+                                    row.bestMaxPoints,
+                                    " pts"))))));
+                })))),
+                tab === "highscores" && (() => {
+                    const hsMap = {};
+                    filteredSessions.filter(s => s.timed).forEach(s => {
+                        const key = s.library + '|' + s.quizType;
+                        if (!hsMap[key] || s.points > hsMap[key].points) {
+                            hsMap[key] = Object.assign({}, s);
+                        }
+                    });
+                    const hsRows = Object.values(hsMap).sort((a, b) => {
+                        const rA = a.maxPoints > 0 ? a.points / a.maxPoints : 0;
+                        const rB = b.maxPoints > 0 ? b.points / b.maxPoints : 0;
+                        return rB - rA || b.points - a.points;
+                    });
+                    const qLabel = { kanji: "漢字", compounds: "熟語", compounds_reverse: "英語" };
+                    if (hsRows.length === 0)
+                        return (React.createElement("div", { style: { textAlign: "center", padding: "32px 0", color: "#aaa", fontSize: "0.82rem" } }, "No timed sessions yet \u2014 enable Timed Mode to earn speed scores!"));
+                    return (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 } }, hsRows.map((s, i) => {
                         const medal = getMedalForSession(s);
                         const pct = s.maxPoints > 0 ? Math.round((s.points / s.maxPoints) * 100) : 0;
                         const barColor = medal ? medal.color : "#aaa";
                         const date = new Date(s.date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-                        return (React.createElement("div", { key: s.library + i, style: { background: "#faf6ee", border: `1px solid ${medal ? medal.color + "55" : "#e8dcc8"}`, borderRadius: 6, padding: "9px 12px" } },
-                            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 } },
-                                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
-                                    React.createElement("span", { style: { fontSize: "0.78rem", color: "#bbb", fontWeight: 700, minWidth: 18 } },
+                        return (React.createElement("div", { key: s.library + s.quizType, style: { background: "#faf6ee", border: `1px solid ${medal ? medal.color + "55" : "#e8dcc8"}`, borderRadius: 8, padding: "10px 12px" } },
+                            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 } },
+                                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+                                    React.createElement("span", { style: { fontSize: "1.1rem", color: "#aaa", fontWeight: 700, minWidth: 18 } },
                                         "#",
                                         i + 1),
                                     React.createElement("div", null,
-                                        React.createElement("div", { style: { fontSize: "0.78rem", fontWeight: 600, color: "#1a1008" } }, s.libraryLabel),
-                                        React.createElement("div", { style: { fontSize: "0.58rem", color: "#aaa", marginTop: 1 } },
+                                        React.createElement("div", { style: { fontSize: "0.82rem", fontWeight: 700, color: "#1a1008" } }, s.libraryLabel),
+                                        React.createElement("div", { style: { fontSize: "0.6rem", color: "#aaa", marginTop: 1 } },
+                                            qLabel[s.quizType],
+                                            " \u00B7 ",
                                             s.total,
                                             "q \u00B7 ",
                                             date))),
-                                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
-                                    medal && React.createElement("span", { style: { fontFamily: "serif", fontSize: "1rem", color: medal.color, fontWeight: 700 } }, medal.kanji),
-                                    React.createElement("span", { style: { fontSize: "0.78rem", color: medal ? medal.color : "#b8860b", fontWeight: 700 } },
-                                        s.points,
-                                        "/",
-                                        s.maxPoints,
-                                        " pts"))),
-                            React.createElement("div", { style: { height: 4, background: "#e8dcc8", borderRadius: 3 } },
-                                React.createElement("div", { style: { height: "100%", borderRadius: 3, background: barColor, width: `${pct}%`, transition: "width 0.4s" } }))));
-                    }))));
-            })(),
-            React.createElement("div", { style: { borderTop: "1px solid #e8dcc8", paddingTop: 14 } }, !confirmReset ? (React.createElement("button", { onClick: () => setConfirmReset(true), style: { background: "none", border: "1px solid #ddd", borderRadius: 4, padding: "7px 16px",
-                    fontSize: "0.68rem", color: "#bbb", cursor: "pointer", fontFamily: "monospace", width: "100%" } }, "Reset all stats")) : (React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
-                React.createElement("span", { style: { fontSize: "0.72rem", color: "#c0392b", flex: 1 } }, "Delete all session history?"),
-                React.createElement("button", { onClick: () => setConfirmReset(false), style: { padding: "6px 14px", borderRadius: 4, border: "1px solid #ddd", background: "#faf6ee",
-                        fontSize: "0.68rem", cursor: "pointer", fontFamily: "monospace" } }, "Cancel"),
-                React.createElement("button", { onClick: () => { onReset(); onClose(); }, style: { padding: "6px 14px", borderRadius: 4, border: "none", background: "#c0392b",
-                        color: "white", fontSize: "0.68rem", cursor: "pointer", fontFamily: "monospace" } }, "Delete")))))));
+                                medal && React.createElement("span", { style: { fontFamily: "serif", fontSize: "1.4rem", color: medal.color, fontWeight: 700 } }, medal.kanji)),
+                            React.createElement("div", { style: { height: 5, background: "#e8dcc8", borderRadius: 3, marginBottom: 5 } },
+                                React.createElement("div", { style: { height: "100%", borderRadius: 3, background: barColor, width: `${pct}%`, transition: "width 0.4s" } })),
+                            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "#aaa" } },
+                                React.createElement("span", null,
+                                    "\u26A1 ",
+                                    React.createElement("b", { style: { color: medal ? medal.color : "#1a1008", fontSize: "0.78rem" } }, s.points),
+                                    "/",
+                                    s.maxPoints,
+                                    " pts"),
+                                React.createElement("span", null,
+                                    React.createElement("b", { style: { color: "#27ae60" } }, s.score),
+                                    "/",
+                                    s.total,
+                                    " correct"))));
+                    })));
+                })(),
+                (() => {
+                    const hsMap = {};
+                    filteredSessions.filter(s => s.timed && s.quizType === tab).forEach(s => {
+                        if (!hsMap[s.library] || s.points > hsMap[s.library].points) {
+                            hsMap[s.library] = Object.assign({}, s);
+                        }
+                    });
+                    const hsRows = Object.values(hsMap).sort((a, b) => {
+                        const rA = a.maxPoints > 0 ? a.points / a.maxPoints : 0;
+                        const rB = b.maxPoints > 0 ? b.points / b.maxPoints : 0;
+                        return rB - rA || b.points - a.points;
+                    });
+                    if (hsRows.length === 0)
+                        return null;
+                    return (React.createElement("div", { style: { marginBottom: 20 } },
+                        React.createElement("div", { style: { fontSize: "0.65rem", color: "#aaa", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 } }, "\u26A1 High Scores"),
+                        React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, hsRows.map((s, i) => {
+                            const medal = getMedalForSession(s);
+                            const pct = s.maxPoints > 0 ? Math.round((s.points / s.maxPoints) * 100) : 0;
+                            const barColor = medal ? medal.color : "#aaa";
+                            const date = new Date(s.date).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                            return (React.createElement("div", { key: s.library + i, style: { background: "#faf6ee", border: `1px solid ${medal ? medal.color + "55" : "#e8dcc8"}`, borderRadius: 6, padding: "9px 12px" } },
+                                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 } },
+                                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+                                        React.createElement("span", { style: { fontSize: "0.78rem", color: "#bbb", fontWeight: 700, minWidth: 18 } },
+                                            "#",
+                                            i + 1),
+                                        React.createElement("div", null,
+                                            React.createElement("div", { style: { fontSize: "0.78rem", fontWeight: 600, color: "#1a1008" } }, s.libraryLabel),
+                                            React.createElement("div", { style: { fontSize: "0.58rem", color: "#aaa", marginTop: 1 } },
+                                                s.total,
+                                                "q \u00B7 ",
+                                                date))),
+                                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6 } },
+                                        medal && React.createElement("span", { style: { fontFamily: "serif", fontSize: "1rem", color: medal.color, fontWeight: 700 } }, medal.kanji),
+                                        React.createElement("span", { style: { fontSize: "0.78rem", color: medal ? medal.color : "#b8860b", fontWeight: 700 } },
+                                            s.points,
+                                            "/",
+                                            s.maxPoints,
+                                            " pts"))),
+                                React.createElement("div", { style: { height: 4, background: "#e8dcc8", borderRadius: 3 } },
+                                    React.createElement("div", { style: { height: "100%", borderRadius: 3, background: barColor, width: `${pct}%`, transition: "width 0.4s" } }))));
+                        }))));
+                })(),
+                React.createElement("div", { style: { borderTop: "1px solid #e8dcc8", paddingTop: 14 } }, !confirmReset ? (React.createElement("button", { onClick: () => setConfirmReset(true), style: { background: "none", border: "1px solid #ddd", borderRadius: 4, padding: "7px 16px",
+                        fontSize: "0.68rem", color: "#bbb", cursor: "pointer", fontFamily: "monospace", width: "100%" } }, "Reset all stats")) : (React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+                    React.createElement("span", { style: { fontSize: "0.72rem", color: "#c0392b", flex: 1 } }, "Delete all session history?"),
+                    React.createElement("button", { onClick: () => setConfirmReset(false), style: { padding: "6px 14px", borderRadius: 4, border: "1px solid #ddd", background: "#faf6ee",
+                            fontSize: "0.68rem", cursor: "pointer", fontFamily: "monospace" } }, "Cancel"),
+                    React.createElement("button", { onClick: () => { onReset(); onClose(); }, style: { padding: "6px 14px", borderRadius: 4, border: "none", background: "#c0392b",
+                            color: "white", fontSize: "0.68rem", cursor: "pointer", fontFamily: "monospace" } }, "Delete"))))))));
 }
 const overlayStyle = {
     position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000,
-    display: "flex", alignItems: "flex-end", justifyContent: "center",
+    display: "flex", alignItems: "flex-start", justifyContent: "center",
+    paddingTop: 75,
 };
 const modalStyle = {
-    background: "white", borderRadius: "12px 12px 0 0", width: "100%", maxWidth: 480,
-    padding: "20px 16px 32px", boxShadow: "0 -4px 32px rgba(0,0,0,0.18)",
+    background: "white", borderRadius: "12px", width: "calc(100% - 32px)", maxWidth: 480,
+    maxHeight: "calc(100vh - 95px)", display: "flex", flexDirection: "column",
+    boxShadow: "0 8px 40px rgba(0,0,0,0.22)",
 };
 const modalHeaderStyle = {
     display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18,
@@ -1140,7 +1146,6 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
                             quizScore,
                             "/",
                             quizCards.length),
-                        React.createElement("div", { style: { fontSize: "1rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "#aaa", marginTop: 5, fontFamily: "monospace" } }, "Correct"),
                         React.createElement("div", { style: { fontSize: "1.4rem", color: accuracyColor, marginTop: 8, fontFamily: "serif" } }, accuracyLabel)),
                     quizTimerEnabled && (React.createElement("div", { style: { margin: "0 auto 24px", maxWidth: 260, padding: "14px 18px", background: speedMedal ? speedMedal.bg : "#fafafa", border: `1px solid ${speedMedal ? speedMedal.color + "55" : "#eee"}`, borderRadius: 8 } },
                         React.createElement("div", { style: { fontSize: "0.65rem", letterSpacing: "0.2em", textTransform: "uppercase", color: "#aaa", marginBottom: 10, fontFamily: "monospace" } }, "Speed Score"),
