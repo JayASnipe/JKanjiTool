@@ -420,6 +420,8 @@ function App() {
   const [readLevel, setReadLevel] = useState("N5");       // "N5" | "N4" | "N3"
   const [readCount, setReadCount] = useState(5);          // 5 | 10 | 15
   const [readLength, setReadLength] = useState("medium"); // "short" | "medium" | "long"
+  const [readIncludeGroup, setReadIncludeGroup] = useState(false);
+  const [readAiInput, setReadAiInput] = useState("");
   const [cyoaTheme, setCyoaTheme] = useState("fantasy");  // "fantasy" | "mystery" | "slice" | "historical"
   const [readContent, setReadContent] = useState(null);   // parsed content array
   const [readLoading, setReadLoading] = useState(false);
@@ -501,6 +503,14 @@ function App() {
   useEffect(() => { LS.set("kanji_studied", studied); }, [studied]);
   useEffect(() => { LS.set("kanji_scores", scores); }, [scores]);
   useEffect(() => { LS.set("kanji_sessions", sessions); }, [sessions]);
+  // Restore readIncludeGroup per library when lib changes
+  useEffect(() => {
+    setReadIncludeGroup(LS.get("read_include_group_" + lib.id, false));
+  }, [lib.id]);
+  // Persist readIncludeGroup whenever it changes
+  useEffect(() => {
+    LS.set("read_include_group_" + lib.id, readIncludeGroup);
+  }, [readIncludeGroup, lib.id]);
 
   // Record a session entry whenever a quiz finishes
   useEffect(() => {
@@ -571,9 +581,10 @@ function App() {
       slice:      "a warm slice-of-life story set in everyday Japan",
       historical: "a story set in feudal Japan (samurai era)",
     };
+    const rndShuffleCyoa = arr => { for (let i = arr.length-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; };
     const vocabCards = readScope === "card" ? [card] : cards;
-    const vocabList = vocabCards
-      .flatMap(c => (c.compounds || []).map(cp => `${cp.jp}(${cp.reading}, ${cp.meaning})`))
+    const vocabList = rndShuffleCyoa(vocabCards
+      .flatMap(c => (c.compounds || []).map(cp => `${cp.jp}(${cp.reading}, ${cp.meaning})`)))
       .slice(0, 40).join("、");
     const theme = cyoaThemeMap[cyoaTheme] || cyoaThemeMap.fantasy;
     return `You are a Japanese language teacher running a choose-your-own-adventure story for a student studying Japanese at JLPT ${readLevel} level. Write it at a PG13-rated level in the style of a light novel with an emphasis on character growth, building a party and a grand adventure.
@@ -605,11 +616,33 @@ Begin the story now with the opening scene.`;
     window.speechSynthesis?.cancel();
 
     // Build vocab list for prompt
-    const vocabCards = readScope === "card" ? [card] : cards;
-    const vocabList = vocabCards
-      .flatMap(c => (c.compounds || []).map(cp => `${cp.jp}(${cp.reading}, ${cp.meaning})`))
-      .slice(0, 60)
-      .join("、");
+    // Helper: shuffle an array in place (Fisher-Yates)
+    const rndShuffle = arr => { for (let i = arr.length-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; };
+    // Interleave compounds round-robin across shuffled cards — prevents first-kanji dominance
+    const interleave = (cardArr) => {
+      const sc = rndShuffle([...cardArr]);
+      const buckets = sc.map(c => rndShuffle((c.compounds||[]).map(cp => `${cp.jp}(${cp.reading}, ${cp.meaning})`)));
+      const out = [];
+      const maxLen = Math.max(...buckets.map(b => b.length), 0);
+      for (let i = 0; i < maxLen; i++) { for (const b of buckets) { if (b[i] !== undefined) out.push(b[i]); } }
+      return out;
+    };
+
+    let vocabItems;
+    if (readScope === "card") {
+      vocabItems = rndShuffle((card.compounds || []).map(cp => `${cp.jp}(${cp.reading}, ${cp.meaning})`));
+    } else if (readIncludeGroup && lib.group) {
+      // Pool vocab from current library (50%) + rest of group split equally (50%)
+      const groupLibs = ALL_LIBRARIES.filter(l => l.group === lib.group && l.id !== lib.id);
+      const currentItems = interleave(cards);
+      const currentSlots = 30; // 50% of 60
+      const otherSlots = groupLibs.length > 0 ? Math.floor(30 / groupLibs.length) : 0;
+      const otherItems = rndShuffle(groupLibs.flatMap(gl => interleave(gl.cards).slice(0, otherSlots)));
+      vocabItems = [...currentItems.slice(0, currentSlots), ...otherItems];
+    } else {
+      vocabItems = interleave(cards);
+    }
+    const vocabList = vocabItems.slice(0, 60).join("、");
 
     const lengthMap = { short: "~200 Japanese characters", medium: "~500 Japanese characters", long: "~800 Japanese characters" };
     const countLabel = readType === "sentences" ? `exactly ${readCount} sentences` : lengthMap[readLength];
@@ -619,12 +652,16 @@ Begin the story now with the opening scene.`;
       ? Math.max(1500, readCount * 200)
       : (readLength === "long" ? 4000 : readLength === "medium" ? 2500 : 1500);
 
+    const isSpicy = lib.group === "spicy";
+    const spicyMod = isSpicy ? " Give it an edgy, adult tone — dark humor, suggestive situations, mature themes are welcome." : "";
+    const aiMod = readAiInput.trim() ? ` Additional instruction: ${readAiInput.trim()}` : "";
+
     const prompt = readType === "sentences"
-      ? `Generate ${countLabel} in Japanese at JLPT ${readLevel} level using vocabulary from this list where natural: ${vocabList}.
+      ? `Generate ${countLabel} in Japanese at JLPT ${readLevel} level using vocabulary from this list where natural: ${vocabList}.${spicyMod}${aiMod}
 
 Return ONLY a JSON array with no markdown fences, no explanation, no text before or after:
 [{"jp":"sentence with [漢字|かんじ] furigana markup on each kanji word","en":"English translation"},...]`
-      : `Write a story in Japanese at JLPT ${readLevel} level, ${countLabel}, naturally using vocabulary from: ${vocabList}.
+      : `Write a story in Japanese at JLPT ${readLevel} level, ${countLabel}, naturally using vocabulary from: ${vocabList}.${spicyMod}${aiMod}
 
 Return ONLY a JSON object with no markdown fences, no explanation, no text before or after:
 {"title":"title with [漢字|かんじ] furigana","paragraphs":[{"jp":"paragraph with [漢字|かんじ] furigana on kanji words","en":"English translation"},...]}`
@@ -1583,6 +1620,32 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
                   </div>
                 </div>
               )}
+
+              {/* Include full group toggle — only when scope=library and library has group siblings */}
+              {readScope === "library" && lib.group && ALL_LIBRARIES.filter(l => l.group === lib.group && l.id !== lib.id).length > 0 && (
+                <div style={{ marginBottom:16 }}>
+                  <button style={S.toggle(readIncludeGroup)} onClick={() => setReadIncludeGroup(p => !p)}>
+                    <span>📚 Include full group {readIncludeGroup ? "— ON" : "— Off"}</span>
+                    <span style={{ fontSize:"0.62rem", opacity:0.7 }}>
+                      {readIncludeGroup
+                        ? `Mixing vocab from all ${GROUPS.find(g => g.id === lib.group)?.label || "group"} libraries`
+                        : "tap to add vocab from other libraries in this group"}
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              {/* AI Input */}
+              <div style={{ marginBottom:14 }}>
+                <div style={S.sectionLabel()}>✨ AI Input <span style={{ fontWeight:400, opacity:0.6 }}>(optional)</span></div>
+                <textarea
+                  value={readAiInput}
+                  onChange={e => setReadAiInput(e.target.value)}
+                  placeholder="e.g. set the story in a ramen shop, include a talking cat..."
+                  rows={2}
+                  style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", borderRadius:6, border:"1px solid #e8dcc8", background:"#fffdf8", fontSize:"0.75rem", fontFamily:"inherit", color:"#3a2a1a", resize:"vertical", outline:"none" }}
+                />
+              </div>
 
               <button style={{ ...S.btn, width:"100%", padding:"12px" }} onClick={generateRead}>
                 Generate ✦
