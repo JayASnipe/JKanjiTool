@@ -436,6 +436,7 @@ function App() {
   const [showSpicyPrompt, setShowSpicyPrompt] = useState(false);
   const [spicyInput, setSpicyInput] = useState("");
   const [spicyError, setSpicyError] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const [idx, setIdx] = useState(0);
   const [layer, setLayer] = useState(0);
   const [wideFlash, setWideFlash] = useState(false);
@@ -511,6 +512,15 @@ function App() {
   useEffect(() => {
     LS.set("read_include_group_" + lib.id, readIncludeGroup);
   }, [readIncludeGroup, lib.id]);
+
+  // Track online/offline status
+  useEffect(() => {
+    const goOnline  = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener("online",  goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => { window.removeEventListener("online", goOnline); window.removeEventListener("offline", goOffline); };
+  }, []);
 
   // Record a session entry whenever a quiz finishes
   useEffect(() => {
@@ -903,7 +913,8 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
     );
   }
 
-  const totalQuizPoints = quizScore + quizBonusTotal;
+
+    const totalQuizPoints = quizScore + quizBonusTotal;
   // Max possible: 1 base pt + 5 speed bonus pts per question
   const maxQuizPoints = quizTimerEnabled ? quizCards.length * 6 : quizCards.length;
 
@@ -914,7 +925,8 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
         <div style={{ fontFamily:"serif", fontSize:"2rem", fontWeight:700, letterSpacing:"0.05em" }}>J Kanji Tool</div>
         <div style={{ fontSize:"0.6rem", letterSpacing:"0.2em", color:"#aaa", textTransform:"uppercase" }}>Japanese Kanji Study · 漢字学習</div>
         <button
-          title="Clear cache and reload"
+          title={isOnline ? "Clear cache and reload" : "No internet connection"}
+          disabled={!isOnline}
           onClick={() => {
             if ('serviceWorker' in navigator) {
               caches.keys().then(function(keys) {
@@ -925,7 +937,21 @@ Return ONLY a JSON object with no markdown fences, no explanation, no text befor
               window.location.reload();
             }
           }}
-          style={{ position:"absolute", top:0, right:0, background:"none", border:"none", cursor:"pointer", fontSize:"0.85rem", color:"#ccc", padding:"4px 6px" }}>
+          style={{
+            position: "absolute", top: 0, right: 0,
+            background: isOnline ? "#c0392b" : "#ddd",
+            border: "none",
+            borderRadius: 6,
+            cursor: isOnline ? "pointer" : "not-allowed",
+            fontSize: "1rem",
+            color: isOnline ? "#fff" : "#aaa",
+            padding: "4px 9px",
+            lineHeight: 1,
+            fontWeight: 700,
+            boxShadow: isOnline ? "0 2px 6px rgba(192,57,43,0.35)" : "none",
+            transition: "all 0.2s",
+            opacity: isOnline ? 1 : 0.5,
+          }}>
           ↺
         </button>
       </div>

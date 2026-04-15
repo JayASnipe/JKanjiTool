@@ -1,5 +1,5 @@
 // J Kanji Service Worker v5
-const CACHE = 'kanji-202604111553';
+const CACHE = 'kanji-202604160516';
 
 const PRECACHE = [
   './',
@@ -7,12 +7,12 @@ const PRECACHE = [
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
-  './app-compiled.js?v=202604111553',
-  './data/grammar.json?v=202604111553',
-  './data/thematic.json?v=202604111553',
-  './data/spicy.json?v=202604111553',
-  './data/grade1.json?v=202604111553',
-  './data/grades2-5.json?v=202604111553',
+  './app-compiled.js?v=202604160516',
+  './data/grammar.json?v=202604160516',
+  './data/thematic.json?v=202604160516',
+  './data/spicy.json?v=202604160516',
+  './data/grade1.json?v=202604160516',
+  './data/grades2-5.json?v=202604160516',
 ];
 
 self.addEventListener('install', e => {
@@ -34,7 +34,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET') return;
-  if (url.origin !== location.origin) return;  // let CDN (React) be handled by browser
+  // Cache CDN requests (e.g. React) so app works fully offline after first load
 
   e.respondWith(
     caches.match(e.request).then(cached => {
